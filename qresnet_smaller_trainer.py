@@ -16,18 +16,25 @@ import torchvision.datasets as datasets
 import qresnet_smaller
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
+train_this_shit = ['qresnet20']
+
+# model_names = sorted(name for name in train_this_shit
+#     if name.islower() and not name.startswith("__")
+#                      and name.startswith("qresnet_smaller")
+#                      and callable(train_this_shit[name]))
+
 model_names = sorted(name for name in qresnet_smaller.__dict__
     if name.islower() and not name.startswith("__")
-                     and name.startswith("qresnet_smaller")
+                     and name.startswith("qresnet")
                      and callable(qresnet_smaller.__dict__[name]))
 
 print(model_names)
 
 parser = argparse.ArgumentParser(description='Propert ResNets for CIFAR10 in pytorch')
-parser.add_argument('--arch', '-a', metavar='ARCH', default='qresnet56',
+parser.add_argument('--arch', '-a', metavar='ARCH', default='qresnet20',
                     choices=model_names,
                     help='model architecture: ' + ' | '.join(model_names) +
-                    ' (default: qresnet32)')
+                    ' (default: qresnet20)')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 parser.add_argument('--epochs', default=99, type=int, metavar='N',
