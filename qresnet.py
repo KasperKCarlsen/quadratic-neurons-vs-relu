@@ -28,7 +28,8 @@ import torch.nn.init as init
 
 from torch.autograd import Variable
 
-__all__ = ['ResNet', 'qresnet20', 'qresnet32', 'qresnet44', 'qresnet56', 'qresnet110', 'qresnet1202']
+# __all__ = ['ResNet', 'qresnet20', 'qresnet32', 'qresnet44', 'qresnet56', 'qresnet110', 'qresnet1202']
+__all__ = ['ResNet', 'qresnet20']
 
 
 
