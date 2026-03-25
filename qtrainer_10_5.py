@@ -13,20 +13,13 @@ import torch.optim
 import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
-import qresnet_smaller
+import qresnet
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 
-train_this_shit = ['qresnet20']
-
-# model_names = sorted(name for name in train_this_shit
-#     if name.islower() and not name.startswith("__")
-#                      and name.startswith("qresnet_smaller")
-#                      and callable(train_this_shit[name]))
-
-model_names = sorted(name for name in qresnet_smaller.__dict__
+model_names = sorted(name for name in qresnet.__dict__
     if name.islower() and not name.startswith("__")
                      and name.startswith("qresnet")
-                     and callable(qresnet_smaller.__dict__[name]))
+                     and callable(qresnet.__dict__[name]))
 
 print(model_names)
 
@@ -34,10 +27,10 @@ parser = argparse.ArgumentParser(description='Propert ResNets for CIFAR10 in pyt
 parser.add_argument('--arch', '-a', metavar='ARCH', default='qresnet20',
                     choices=model_names,
                     help='model architecture: ' + ' | '.join(model_names) +
-                    ' (default: qresnet20)')
+                    ' (default: qresnet110)')
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
-parser.add_argument('--epochs', default=99, type=int, metavar='N',
+parser.add_argument('--epochs', default=200, type=int, metavar='N',
                     help='number of total epochs to run')
 parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                     help='manual epoch number (useful on restarts)')
@@ -45,7 +38,7 @@ parser.add_argument('-b', '--batch-size', default=128, type=int,
                     metavar='N', help='mini-batch size (default: 128)')
 parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
                     metavar='LR', help='initial learning rate')
-parser.add_argument('--lr_gb', '--learning-rate-gb', default=0, type=float,
+parser.add_argument('--lr_gb', '--learning-rate-gb', default=0.00001, type=float,
                     metavar='LR_gb', help='initial learning rate gb')
 parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
@@ -63,7 +56,7 @@ parser.add_argument('--half', dest='half', action='store_true',
                     help='use half-precision(16-bit) ')
 parser.add_argument('--save-dir', dest='save_dir',
                     help='The directory used to save the trained models',
-                    default='QResNet/Efficiency/56_initial', type=str)
+                    default='QResNet/torch_code', type=str)
 parser.add_argument('--save-every', dest='save_every',
                     help='Saves checkpoints at every specified number of epochs',
                     type=int, default=10)
@@ -79,7 +72,7 @@ def main():
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
 
-    model = torch.nn.DataParallel(qresnet_smaller.__dict__[args.arch]())
+    model = torch.nn.DataParallel(qresnet.__dict__[args.arch]())
     print(model)
     model.cuda()
     print(sum(p.numel() for p in model.parameters() if p.requires_grad)) 
@@ -128,14 +121,17 @@ def main():
 
     group_r = list(map(lambda x: x[1],list(filter(lambda kv: 'r.' in kv[0], model.named_parameters()))))
         
+    
+    group_g = list(map(lambda x: x[1],list(filter(lambda kv: 'g.' in kv[0], model.named_parameters()))))
         
     group_b = list(map(lambda x: x[1],list(filter(lambda kv: 'b.' in kv[0], model.named_parameters()))))
         
-    group_else = list(map(lambda x: x[1],list(filter(lambda kv: ('r.' not in kv[0])&('b.' not in kv[0]), model.named_parameters()))))
+    group_else = list(map(lambda x: x[1],list(filter(lambda kv: ('r.' not in kv[0])&('g.' not in kv[0])&('b.' not in kv[0]), model.named_parameters()))))
         
        
     optimizer = torch.optim.SGD(    [
         {"params": group_r},
+        {"params": group_g, "lr": args.lr_gb},
         {"params": group_b, "lr": args.lr_gb},
         {"params": group_else},],
                                 args.lr,
@@ -153,7 +149,7 @@ def main():
 
     prec = np.zeros((1,args.epochs))
     prec_train = np.zeros((1,args.epochs))
-
+    
     for epoch in range(args.start_epoch, args.epochs):
 
         # train for one epoch
@@ -163,7 +159,12 @@ def main():
 
         # evaluate on validation set
         prec1 = validate(val_loader, model, criterion)
+
+        prec1_training = validate(train_loader, model, criterion)
+
         prec[0,epoch] = prec1
+        prec_train[0,epoch] =  prec1_training
+
         for param_group in optimizer.param_groups:
             print(param_group['lr'])
  
@@ -183,12 +184,9 @@ def main():
             'best_prec1': best_prec1,
         }, is_best, filename=os.path.join(args.save_dir, 'model.th'))
 
-        prec1_training = validate(train_loader, model, criterion)
 
-        prec[0,epoch] = prec1
-        prec_train[0,epoch] =  prec1_training
 
-    fp = open('QResNet/Efficiency/precision.txt', 'w')  
+    fp = open('QResNet/ITL/q_resnet/precision_10_5.txt', 'w')  
     for j in range(prec.shape[1]):
 
                 fp.write( '%1.10f,' % prec[0,j] ),
@@ -196,15 +194,12 @@ def main():
     fp.close()
 
 
-    fp = open('QResNet/Efficiency/precision_training.txt', 'w')  
+    fp = open('QResNet/ITL/q_resnet/precision_training_10_5.txt', 'w')  
     for j in range(prec_train.shape[1]):
 
                 fp.write( '%1.10f,' % prec_train[0,j] ),
                 
     fp.close()
-
-
-
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
