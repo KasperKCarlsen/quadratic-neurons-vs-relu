@@ -33,8 +33,6 @@ class Config:
         self.use_mnist = False
         self.use_cifar10 = True
 
-config = Config()
-
 def save_model(model, name,relu):
     if relu:
         torch.save(model.state_dict(), f'models/{name}_ReLU.pth')
@@ -123,6 +121,7 @@ class BasicBlock(nn.Module):
 
         return out
 
+
 class QResNet(nn.Module):
     def __init__(self, config, block, num_blocks):
         super().__init__()
@@ -164,51 +163,34 @@ class QResNet(nn.Module):
         return self.linear(out)
 
 
-def q_custom():
-    return QResNet(BasicBlock, blocks)
+def qresnet_relu_0(config):
+    return QResNet(config, BasicBlock, [3, 3, 3])
 
-def qresnet20():
-    return QResNet(BasicBlock, [3, 3, 3])
+def qresnet_relu_1(config):
+    return QResNet(config, BasicBlock, [3, 3, 3])
 
+def qresnet_relu_2(config):
+    return QResNet(config, BasicBlock, [3, 3, 3])
 
-def qresnet32():
-    return QResNet(BasicBlock, [5, 5, 5])
+def train_model(X, y, config, model_fn):
+    loader = DataLoader(
+        TensorDataset(X, y),
+        batch_size=config.batch_size,
+        shuffle=True
+    )
 
-
-def qresnet44():
-    return QResNet(BasicBlock, [7, 7, 7])
-
-
-def qresnet56():
-    return QResNet(BasicBlock, [9, 9, 9])
-
-
-def qresnet110():
-    return QResNet(BasicBlock, [18, 18, 18])
-
-
-def qresnet1202():
-    return QResNet(BasicBlock, [200, 200, 200])
-
-def train_model(X,y,model_type_str):
-    train_loader = DataLoader(TensorDataset(X, y), batch_size=128, shuffle=True)
-
-    # Build model from existing net_name (e.g., 'qresnet1202')
-    model = globals()[model_type_str]()
+    model = model_fn(config)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
+    model.to(device)
 
+    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-    # Train
-    for epoch in range(epochs):
+    for epoch in range(config.epochs):
         model.train()
-        running_loss = 0.0
-        correct = 0
-        total = 0
+        total, correct, loss_sum = 0, 0, 0
 
-        for images, labels in train_loader:
+        for images, labels in loader:
             images, labels = images.to(device), labels.to(device)
 
             optimizer.zero_grad()
@@ -217,16 +199,14 @@ def train_model(X,y,model_type_str):
             loss.backward()
             optimizer.step()
 
-            running_loss += loss.item() * labels.size(0)
-            preds = outputs.argmax(dim=1)
+            loss_sum += loss.item() * labels.size(0)
+            preds = outputs.argmax(1)
             correct += (preds == labels).sum().item()
             total += labels.size(0)
 
-        print(
-            f"Epoch {epoch+1}/{epochs} | "
-            f"Loss: {running_loss/total:.4f} | "
-            f"Acc: {correct/total:.4f}"
-        )
+        print(f"Epoch {epoch+1}/{config.epochs} | "
+              f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}")
+
     return model
 
 if minst:
@@ -271,10 +251,45 @@ def test_model(path, model):
     print(f'Accuracy: {accuracy:.2f}%')
     model.train()
 
-qresnet20_model = train_model(X=X, y=y, model_type_str="qresnet20")
+qresnet20_model = train_model(X=X, y=y, model_type_str="q_custom_relu_0")
 
 # qresnet20_model = load_model("qresnet20_noReLU.pth", qresnet20)
 
 save_model(qresnet20_model, "qresnet20")
 
 test_model("data/cifar-10-batches-py/test_batch", qresnet20_model)
+
+import json
+from pathlib import Path
+
+def notebook_to_clean_py(notebook_path, output_path=None):
+    notebook_path = Path(notebook_path)
+    if output_path is None:
+        output_path = notebook_path.with_suffix(".py")
+    else:
+        output_path = Path(output_path)
+
+    with notebook_path.open("r", encoding="utf-8") as f:
+        nb = json.load(f)
+
+    code_chunks = []
+    for cell in nb.get("cells", []):
+        if cell.get("cell_type") == "code":
+            source = cell.get("source", [])
+            if isinstance(source, list):
+                code = "".join(source)
+            else:
+                code = source
+            if code.strip():
+                code_chunks.append(code.rstrip())
+
+    output_text = "\n\n".join(code_chunks) + "\n"
+
+    with output_path.open("w", encoding="utf-8") as f:
+        f.write(output_text)
+
+    print(f"Saved clean Python file to: {output_path}")
+
+# Example usage:
+notebook_to_clean_py("Quad_Neuron.ipynb")
+# notebook_to_clean_py("input.ipynb", "output.py")
