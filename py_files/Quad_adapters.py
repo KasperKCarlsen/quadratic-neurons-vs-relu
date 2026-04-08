@@ -14,35 +14,32 @@ import numpy as np
 
 class Config:
     def __init__(self):
-        # Data / paths
-        self.input_channels = 3
-        self.path_train = "data/cifar-10-batches-py/data_batch_1"
-        self.path_test = "data/cifar-10-batches-py/test_batch"
-
         # Training
-        self.epochs = 50
+        self.epochs = 25
         self.batch_size = 128
         self.lr = 1e-3
 
         # Architecture
         self.relu_mode = 1   # 0,1,2
         self.blocks = [3, 3, 3]
-        self.num_classes = 10
 
-        # Dataset flags
-        self.use_mnist = False
-        self.use_cifar10 = True
+        # Load Pretrained
+        self.load_pretrained = True
+        self.pretrained_path = "models/baseline_Baseline.pth"
 
-def save_model(model, name,relu):
-    if relu:
-        torch.save(model.state_dict(), f'models/{name}_ReLU.pth')
-    else:
-        torch.save(model.state_dict(), f'models/{name}_noReLU.pth')
+        # Classes
+        self.classes=  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+
+config = Config()
+
+def save_model(model, name, relu):
+    torch.save(model.state_dict(), f'models/{name}_ReLU_{relu}.pth')
+
 
 def load_model(path,model_type):
     model = model_type()
     model.load_state_dict(torch.load(f"models/{path}"))
-    model.eval()
     return model
 
 def load_batch(path):
@@ -51,10 +48,27 @@ def load_batch(path):
         
     images = batch[b'data']      # (10000, 3072)
     labels = batch[b'labels']    # length 10000
-    
+
     images = images.reshape(10000, 3, 32, 32)
-    
     return images, np.array(labels)
+
+
+
+def get_classes_dataset(classes, X = X, y = y):
+
+    mask = ""
+    for i in classes:
+        mask = mask + f"(y == {i}) | "
+
+    mask = mask[:-3]
+    mask = eval(mask)
+    X_filtered = X[mask]
+    y_filtered = y[mask]
+    
+    print(f"Selected classes: {classes}")
+    print(f"Total samples: {len(X_filtered)}")
+    
+    return X_filtered, y_filtered
 
 class LambdaLayer(nn.Module):
     def __init__(self, lambd):
@@ -128,14 +142,14 @@ class QResNet(nn.Module):
         self.config = config
         self.in_planes = 16
 
-        self.conv1 = nn.Conv2d(config.input_channels, 16, 3, 1, 1, bias=False)
+        self.conv1 = nn.Conv2d(3, 16, 3, 1, 1, bias=False)
         self.bn1 = nn.BatchNorm2d(16)
 
         self.layer1 = self._make_layer(block, 16, num_blocks[0])
         self.layer2 = self._make_layer(block, 32, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 64, num_blocks[2], stride=2)
 
-        self.linear = nn.Linear(64, config.num_classes)
+        self.linear = nn.Linear(64, len(config.classes))
 
     def _make_layer(self, block, planes, num_blocks, stride=1):
         strides = [stride] + [1]*(num_blocks-1)
@@ -163,28 +177,54 @@ class QResNet(nn.Module):
         return self.linear(out)
 
 
-def qresnet_relu_0(config):
+def qresnet20(config):
     return QResNet(config, BasicBlock, [3, 3, 3])
 
-def qresnet_relu_1(config):
-    return QResNet(config, BasicBlock, [3, 3, 3])
+def load_pretrained(model, pretrained_path):
+    pretrained_dict = torch.load(pretrained_path, map_location='cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # Filter out mismatched layers
+    model_dict = model.state_dict()
+    
+    # Only keep pretrained layers that match in shape
+    pretrained_dict_filtered = {
+        k: v for k, v in pretrained_dict.items() 
+        if k in model_dict and v.shape == model_dict[k].shape
+    }
+    
+    # Update model state dict
+    model_dict.update(pretrained_dict_filtered)
+    model.load_state_dict(model_dict, strict=False)  # strict=False allows missing/unexpected keys
+    
+    # Freeze layers as before
+    for name, param in model.named_parameters():
+        if ('conv1r' in name or 'conv2r' in name):
+            param.requires_grad = False
+    
+    return model
 
-def qresnet_relu_2(config):
-    return QResNet(config, BasicBlock, [3, 3, 3])
-
-def train_model(X, y, config, model_fn):
+def train_model(X, y, config=config, model_fn=None):
     loader = DataLoader(
         TensorDataset(X, y),
         batch_size=config.batch_size,
         shuffle=True
     )
+    if config.load_pretrained:
+        model = load_pretrained(model_fn(config), pretrained_path=config.pretrained_path)
+    else:
+        model = model_fn(config)
 
-    model = model_fn(config)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
+    # Only optimize parameters that require gradients
+    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=config.lr)
     criterion = nn.CrossEntropyLoss()
+
+    # Verify what's being trained
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total_params = sum(p.numel() for p in model.parameters())
+    print(f"Trainable: {trainable_params:,} / {total_params:,} params ({100*trainable_params/total_params:.1f}%)")
 
     for epoch in range(config.epochs):
         model.train()
@@ -209,22 +249,6 @@ def train_model(X, y, config, model_fn):
 
     return model
 
-if minst:
-    df = pd.read_csv("data/mnist_train.csv", header=None)
-
-    y = torch.tensor(df.iloc[:, 0].values, dtype=torch.long)
-    X = torch.tensor(df.iloc[:, 1:].values, dtype=torch.float32) / 255.0  # normalize to [0, 1]
-
-    num_pixels = X.shape[1]
-    side = int(num_pixels ** 0.5)
-    assert side * side == num_pixels, f"Expected square image, got {num_pixels} pixels."
-    X = X.view(-1, 1, side, side)  # NCHW for Conv2d: [batch, channel, height, width]
-
-if cifar10:
-    X, y = load_batch("data/cifar-10-batches-py/data_batch_2")
-    X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
-    y = torch.from_numpy(y).long()
-
 def test_model(path, model):
     model.eval()  # disable dropout/batchnorm training behavior
     correct = 0
@@ -236,8 +260,8 @@ def test_model(path, model):
     X, y = load_batch(path)
     X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
     y = torch.from_numpy(y).long()
-
-    train_loader = DataLoader(TensorDataset(X, y), batch_size=128, shuffle=True)
+    X, y = get_classes_dataset(config.classes, X, y)
+    train_loader = DataLoader(TensorDataset(X, y), batch_size=128)
 
     with torch.no_grad():  # disable gradient computation
         for inputs, labels in train_loader:
@@ -249,47 +273,59 @@ def test_model(path, model):
 
     accuracy = 100 * correct / total
     print(f'Accuracy: {accuracy:.2f}%')
-    model.train()
 
-qresnet20_model = train_model(X=X, y=y, model_type_str="q_custom_relu_0")
+X = []
+y = []
+for i in range(1, 6):
+    images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
+    X.append(images)
+    y.append(labels)
+
+X = np.concatenate(X)
+y = np.concatenate(y)
+
+X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
+y = torch.from_numpy(y).long()
+
+qresnet20_model = train_model(X=X, y=y, model_fn=qresnet20)
 
 # qresnet20_model = load_model("qresnet20_noReLU.pth", qresnet20)
 
-save_model(qresnet20_model, "qresnet20")
+# save_model(qresnet20_model, "qresnet20")
 
 test_model("data/cifar-10-batches-py/test_batch", qresnet20_model)
 
-import json
-from pathlib import Path
+# import json
+# from pathlib import Path
 
-def notebook_to_clean_py(notebook_path, output_path=None):
-    notebook_path = Path(notebook_path)
-    if output_path is None:
-        output_path = notebook_path.with_suffix(".py")
-    else:
-        output_path = Path(output_path)
+# def notebook_to_clean_py(notebook_path, output_path=None):
+#     notebook_path = Path(notebook_path)
+#     if output_path is None:
+#         output_path = notebook_path.with_suffix(".py")
+#     else:
+#         output_path = Path(output_path)
 
-    with notebook_path.open("r", encoding="utf-8") as f:
-        nb = json.load(f)
+#     with notebook_path.open("r", encoding="utf-8") as f:
+#         nb = json.load(f)
 
-    code_chunks = []
-    for cell in nb.get("cells", []):
-        if cell.get("cell_type") == "code":
-            source = cell.get("source", [])
-            if isinstance(source, list):
-                code = "".join(source)
-            else:
-                code = source
-            if code.strip():
-                code_chunks.append(code.rstrip())
+#     code_chunks = []
+#     for cell in nb.get("cells", []):
+#         if cell.get("cell_type") == "code":
+#             source = cell.get("source", [])
+#             if isinstance(source, list):
+#                 code = "".join(source)
+#             else:
+#                 code = source
+#             if code.strip():
+#                 code_chunks.append(code.rstrip())
 
-    output_text = "\n\n".join(code_chunks) + "\n"
+#     output_text = "\n\n".join(code_chunks) + "\n"
 
-    with output_path.open("w", encoding="utf-8") as f:
-        f.write(output_text)
+#     with output_path.open("w", encoding="utf-8") as f:
+#         f.write(output_text)
 
-    print(f"Saved clean Python file to: {output_path}")
+#     print(f"Saved clean Python file to: {output_path}")
 
-# Example usage:
-notebook_to_clean_py("Quad_Neuron.ipynb")
-# notebook_to_clean_py("input.ipynb", "output.py")
+# # Example usage:
+# notebook_to_clean_py("Quad_Neuron.ipynb")
+# # notebook_to_clean_py("input.ipynb", "output.py")
