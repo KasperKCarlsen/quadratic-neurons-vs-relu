@@ -12,56 +12,6 @@ import numpy as np
 
 # torchvision.datasets.CIFAR10(root='./data', download=True) #run once
 
-class Config:
-    def __init__(self):
-        # Training
-        self.epochs = 25
-        self.batch_size = 128
-        self.lr = 1e-3
-
-        # Architecture
-        self.blocks = [3, 3, 3]
-
-        # Load Pretrained
-        self.load_pretrained = True
-        self.pretrained_path = "models/baseline_Baseline.pth"
-
-        # Classes
-        self.classes=  [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-
-
-config = Config()
-
-def save_model(model, name):
-    torch.save(model.state_dict(), f'models/{name}_model.pth')
-
-def load_model(path,model_type):
-    model = model_type()
-    model.load_state_dict(torch.load(f"models/{path}"))
-    return model
-
-def load_batch(path):
-    with open(path, 'rb') as f:
-        batch = pickle.load(f, encoding='bytes')
-        
-    images = batch[b'data']      # (10000, 3072)
-    labels = batch[b'labels']    # length 10000
-
-    images = images.reshape(10000, 3, 32, 32)
-    return images, np.array(labels)
-
-X = []
-y = []
-for i in range(1, 6):
-    images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
-    X.append(images)
-    y.append(labels)
-
-X = np.concatenate(X)
-y = np.concatenate(y)
-
-X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
-y = torch.from_numpy(y).long()
 
 class LambdaLayer(nn.Module):
     def __init__(self, lambd):
@@ -82,26 +32,10 @@ class BasicBlock(nn.Module):
         self.conv1r = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
         init.kaiming_normal_(self.conv1r.weight)
 
-        self.conv1g = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
-        self.conv1g.weight.data.fill_(0)
-        self.conv1g.bias.data.fill_(1)
-
-        self.conv1b = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
-        self.conv1b.weight.data.fill_(0)
-        self.conv1b.bias.data.fill_(0)
-
         self.bn1 = nn.BatchNorm2d(planes)
 
         self.conv2r = nn.Conv2d(planes, planes, 3, 1, 1, bias=True)
         init.kaiming_normal_(self.conv2r.weight)
-
-        self.conv2g = nn.Conv2d(planes, planes, 3, 1, 1, bias=True)
-        self.conv2g.weight.data.fill_(0)
-        self.conv2g.bias.data.fill_(1)
-
-        self.conv2b = nn.Conv2d(planes, planes, 3, 1, 1, bias=True)
-        self.conv2b.weight.data.fill_(0)
-        self.conv2b.bias.data.fill_(0)
 
         self.bn2 = nn.BatchNorm2d(planes)
 
@@ -124,26 +58,26 @@ class BasicBlock(nn.Module):
 
 
 class QResNet(nn.Module):
-    def __init__(self, config, block, num_blocks):
+    def __init__(self, relu, block, num_blocks, classes):
         super().__init__()
-        self.config = config
+        self.relu = relu
         self.in_planes = 16
-
-        self.conv1 = nn.Conv2d(config.input_channels, 16, 3, 1, 1, bias=False)
+        self.classes = classes
+        self.conv1 = nn.Conv2d(3, 16, 3, 1, 1, bias=False)
         self.bn1 = nn.BatchNorm2d(16)
 
         self.layer1 = self._make_layer(block, 16, num_blocks[0])
         self.layer2 = self._make_layer(block, 32, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 64, num_blocks[2], stride=2)
 
-        self.linear = nn.Linear(64, len(config.classes))
+        self.linear = nn.Linear(64, len(self.classes))
 
     def _make_layer(self, block, planes, num_blocks, stride=1):
         strides = [stride] + [1]*(num_blocks-1)
         layers = []
 
         for s in strides:
-            layers.append(block(self.in_planes, planes, self.config, s))
+            layers.append(block(self.in_planes, planes, self.relu, s))
             self.in_planes = planes
 
         return nn.Sequential(*layers)
@@ -161,131 +95,75 @@ class QResNet(nn.Module):
         return self.linear(out)
     
 
+class Quad_neuron():
 
-def qresnet20(config):
-    return QResNet(config, BasicBlock, [3, 3, 3])
+    def __init__(self, Relu, num_blocks, block = BasicBlock, classes = [0,1,2,3,4,5,6,7,8,9]):
+        self.model = QResNet(Relu,block,num_blocks,classes)
 
-def get_classes_dataset(classes, X = X, y = y):
 
-    mask = ""
-    for i in classes:
-        mask = mask + f"(y == {i}) | "
+    def train(self, X, y, batch_size, lr, epochs):
+        loader = DataLoader(
+            TensorDataset(X, y),
+            batch_size=batch_size,
+            shuffle=True
+        )
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(device)
 
-    mask = mask[:-3]
-    mask = eval(mask)
-    X_filtered = X[mask]
-    y_filtered = y[mask]
-    
-    print(f"Selected classes: {classes}")
-    print(f"Total samples: {len(X_filtered)}")
-    
-    return X_filtered, y_filtered
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        criterion = nn.CrossEntropyLoss()
 
-def train_model(X, y, config, model_fn):
-    loader = DataLoader(
-        TensorDataset(X, y),
-        batch_size=config.batch_size,
-        shuffle=True
-    )
+        for epoch in range(epochs):
+            self.model.train()
+            total, correct, loss_sum = 0, 0, 0
 
-    model = model_fn(config)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
+            for images, labels in loader:
+                images, labels = images.to(device), labels.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
-    criterion = nn.CrossEntropyLoss()
+                optimizer.zero_grad()
+                outputs = self.model(images)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
 
-    for epoch in range(config.epochs):
-        model.train()
-        total, correct, loss_sum = 0, 0, 0
+                loss_sum += loss.item() * labels.size(0)
+                preds = outputs.argmax(1)
+                correct += (preds == labels).sum().item()
+                total += labels.size(0)
 
-        for images, labels in loader:
-            images, labels = images.to(device), labels.to(device)
+            print(f"Epoch {epoch+1}/{epochs} | "
+                f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}")
 
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+        return None
 
-            loss_sum += loss.item() * labels.size(0)
-            preds = outputs.argmax(1)
-            correct += (preds == labels).sum().item()
-            total += labels.size(0)
 
-        print(f"Epoch {epoch+1}/{config.epochs} | "
-              f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}")
 
-    return model
+    def test(self,X,y):
+        self.model.eval()  # disable dropout/batchnorm training behavior
+        correct = 0
+        total = 0
 
-def test_model(path, model):
-    model.eval()  # disable dropout/batchnorm training behavior
-    correct = 0
-    total = 0
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = self.model.to(device)
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
+        train_loader = DataLoader(TensorDataset(X, y), batch_size=128, shuffle=True)
 
-    X, y = load_batch(path)
+        with torch.no_grad():  # disable gradient computation
+            for inputs, labels in train_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = self.model(inputs)
+                _, predicted = torch.max(outputs, 1)  # get class with highest score
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
 
-    X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
-    y = torch.from_numpy(y).long()
-    X, y = get_classes_dataset(config.classes, X, y)
-    train_loader = DataLoader(TensorDataset(X, y), batch_size=128, shuffle=True)
+        accuracy = 100 * correct / total
+        print(f'Accuracy: {accuracy:.2f}%')
 
-    with torch.no_grad():  # disable gradient computation
-        for inputs, labels in train_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            _, predicted = torch.max(outputs, 1)  # get class with highest score
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
 
-    accuracy = 100 * correct / total
-    print(f'Accuracy: {accuracy:.2f}%')
-    model.train()
+    def save(self, name):
+        torch.save(self.model.state_dict(), f"models/{name}")
 
-X_subset, y_subset = get_classes_dataset(config.classes)
-qresnet20_model = train_model(X=X_subset, y=y_subset, config=config, model_fn=qresnet20)
-save_model(qresnet20_model, "baseline_no_8-9")
+    def load(self, path):
+        self.model.load_state_dict(torch.load(path))
 
-# qresnet20_model = load_model("qresnet20_noReLU.pth", qresnet20)
 
-# save_model(qresnet20_model, "baseline")
-
-test_model("data/cifar-10-batches-py/test_batch", qresnet20_model)
-
-# import json
-# from pathlib import Path
-
-# def notebook_to_clean_py(notebook_path, output_path=None):
-#     notebook_path = Path(notebook_path)
-#     if output_path is None:
-#         output_path = notebook_path.with_suffix(".py")
-#     else:
-#         output_path = Path(output_path)
-
-#     with notebook_path.open("r", encoding="utf-8") as f:
-#         nb = json.load(f)
-
-#     code_chunks = []
-#     for cell in nb.get("cells", []):
-#         if cell.get("cell_type") == "code":
-#             source = cell.get("source", [])
-#             if isinstance(source, list):
-#                 code = "".join(source)
-#             else:
-#                 code = source
-#             if code.strip():
-#                 code_chunks.append(code.rstrip())
-
-#     output_text = "\n\n".join(code_chunks) + "\n"
-
-#     with output_path.open("w", encoding="utf-8") as f:
-#         f.write(output_text)
-
-#     print(f"Saved clean Python file to: {output_path}")
-
-# # Example usage:
-# notebook_to_clean_py("Quad_Neuron.ipynb")
-# # notebook_to_clean_py("input.ipynb", "output.py")

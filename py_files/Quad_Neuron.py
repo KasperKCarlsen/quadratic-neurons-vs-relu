@@ -12,38 +12,6 @@ import numpy as np
 
 #torchvision.datasets.CIFAR10(root='./data', download=True) #run once
 
-class Config:
-    def __init__(self):
-        # Training
-        self.epochs = 25
-        self.batch_size = 128
-        self.lr = 1e-3
-
-        # Architecture
-        self.relu_mode = 1   # 0,1,2
-        self.blocks = [3, 3, 3]
-
-
-config = Config()
-
-def save_model(model, name, relu):
-    torch.save(model.state_dict(), f'models/{name}_ReLU_{relu}.pth')
-
-def load_model(path,model_type):
-    model = model_type()
-    model.load_state_dict(torch.load(f"models/{path}"))
-    return model
-
-def load_batch(path):
-    with open(path, 'rb') as f:
-        batch = pickle.load(f, encoding='bytes')
-        
-    images = batch[b'data']      # (10000, 3072)
-    labels = batch[b'labels']    # length 10000
-
-    images = images.reshape(10000, 3, 32, 32)
-    return images, np.array(labels)
-
 class LambdaLayer(nn.Module):
     def __init__(self, lambd):
         super(LambdaLayer, self).__init__()
@@ -56,9 +24,9 @@ class LambdaLayer(nn.Module):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, config, stride=1, option='A'):
+    def __init__(self, in_planes, planes, relu, stride=1, option='A'):
         super().__init__()
-        self.config = config
+        self.relu = relu
 
         self.conv1r = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
         init.kaiming_normal_(self.conv1r.weight)
@@ -94,7 +62,7 @@ class BasicBlock(nn.Module):
             )
 
     def forward(self, x):
-        relu = self.config.relu_mode
+        relu = self.relu
 
         out = self.bn1(self.conv1r(x)*self.conv1g(x) + self.conv1b(x.pow(2)))
 
@@ -111,11 +79,11 @@ class BasicBlock(nn.Module):
 
 
 class QResNet(nn.Module):
-    def __init__(self, config, block, num_blocks):
+    def __init__(self, relu, block, num_blocks, classes):
         super().__init__()
-        self.config = config
+        self.relu = relu
         self.in_planes = 16
-
+        self.classes = classes
         self.conv1 = nn.Conv2d(3, 16, 3, 1, 1, bias=False)
         self.bn1 = nn.BatchNorm2d(16)
 
@@ -123,20 +91,20 @@ class QResNet(nn.Module):
         self.layer2 = self._make_layer(block, 32, num_blocks[1], stride=2)
         self.layer3 = self._make_layer(block, 64, num_blocks[2], stride=2)
 
-        self.linear = nn.Linear(64, len(config.classes))
+        self.linear = nn.Linear(64, len(self.classes))
 
     def _make_layer(self, block, planes, num_blocks, stride=1):
         strides = [stride] + [1]*(num_blocks-1)
         layers = []
 
         for s in strides:
-            layers.append(block(self.in_planes, planes, self.config, s))
+            layers.append(block(self.in_planes, planes, self.relu, s))
             self.in_planes = planes
 
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        if self.config.relu_mode == 0:
+        if self.relu == 0:
             out = self.bn1(self.conv1(x))
         else:
             out = F.relu(self.bn1(self.conv1(x)))
@@ -151,136 +119,75 @@ class QResNet(nn.Module):
         return self.linear(out)
 
 
-def qresnet_relu_0(config):
-    return QResNet(config, BasicBlock, [3, 3, 3])
+class Quad_neuron():
 
-def train_model(X, y, config, model_fn):
-    loader = DataLoader(
-        TensorDataset(X, y),
-        batch_size=config.batch_size,
-        shuffle=True
-    )
+    def __init__(self, Relu, num_blocks, block = BasicBlock, classes = [0,1,2,3,4,5,6,7,8,9]):
+        self.model = QResNet(Relu,block,num_blocks,classes)
 
-    model = model_fn(config)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.lr)
-    criterion = nn.CrossEntropyLoss()
+    def train(self, X, y, batch_size, lr, epochs):
+        loader = DataLoader(
+            TensorDataset(X, y),
+            batch_size=batch_size,
+            shuffle=True
+        )
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(device)
 
-    for epoch in range(config.epochs):
-        model.train()
-        total, correct, loss_sum = 0, 0, 0
+        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        criterion = nn.CrossEntropyLoss()
 
-        for images, labels in loader:
-            images, labels = images.to(device), labels.to(device)
+        for epoch in range(epochs):
+            self.model.train()
+            total, correct, loss_sum = 0, 0, 0
 
-            optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+            for images, labels in loader:
+                images, labels = images.to(device), labels.to(device)
 
-            loss_sum += loss.item() * labels.size(0)
-            preds = outputs.argmax(1)
-            correct += (preds == labels).sum().item()
-            total += labels.size(0)
+                optimizer.zero_grad()
+                outputs = self.model(images)
+                loss = criterion(outputs, labels)
+                loss.backward()
+                optimizer.step()
 
-        print(f"Epoch {epoch+1}/{config.epochs} | "
-              f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}")
+                loss_sum += loss.item() * labels.size(0)
+                preds = outputs.argmax(1)
+                correct += (preds == labels).sum().item()
+                total += labels.size(0)
 
-    return model
+            print(f"Epoch {epoch+1}/{epochs} | "
+                f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}")
 
-if config.use_mnist:
-    df = pd.read_csv("data/mnist_train.csv", header=None)
+        return None
 
-    y = torch.tensor(df.iloc[:, 0].values, dtype=torch.long)
-    X = torch.tensor(df.iloc[:, 1:].values, dtype=torch.float32) / 255.0  # normalize to [0, 1]
 
-    num_pixels = X.shape[1]
-    side = int(num_pixels ** 0.5)
-    assert side * side == num_pixels, f"Expected square image, got {num_pixels} pixels."
-    X = X.view(-1, 1, side, side)  # NCHW for Conv2d: [batch, channel, height, width]
 
-if config.use_cifar10:
-    X = []
-    y = []
-    for i in range(1, 6):
-        images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
-        X.append(images)
-        y.append(labels)
+    def test(self,X,y):
+        self.model.eval()  # disable dropout/batchnorm training behavior
+        correct = 0
+        total = 0
 
-    X = np.concatenate(X)
-    y = np.concatenate(y)
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = self.model.to(device)
 
-    X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
-    y = torch.from_numpy(y).long()
+        train_loader = DataLoader(TensorDataset(X, y), batch_size=128, shuffle=True)
 
-def test_model(path, model):
-    model.eval()  # disable dropout/batchnorm training behavior
-    correct = 0
-    total = 0
+        with torch.no_grad():  # disable gradient computation
+            for inputs, labels in train_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = self.model(inputs)
+                _, predicted = torch.max(outputs, 1)  # get class with highest score
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.to(device)
+        accuracy = 100 * correct / total
+        print(f'Accuracy: {accuracy:.2f}%')
 
-    X, y = load_batch(path)
-    X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
-    y = torch.from_numpy(y).long()
 
-    train_loader = DataLoader(TensorDataset(X, y), batch_size=128, shuffle=True)
+    def save(self, name):
+        torch.save(self.model.state_dict(), f"models/{name}")
 
-    with torch.no_grad():  # disable gradient computation
-        for inputs, labels in train_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            _, predicted = torch.max(outputs, 1)  # get class with highest score
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+    def load(self, path):
+        self.model.load_state_dict(torch.load(path))
 
-    accuracy = 100 * correct / total
-    print(f'Accuracy: {accuracy:.2f}%')
-    model.train()
 
-qresnet20_model = train_model(X=X, y=y, model_fn=qresnet_relu_1, config=config)
-
-# qresnet20_model = load_model("qresnet20_noReLU.pth", qresnet20)
-
-# save_model(qresnet20_model, "qresnet20")
-
-test_model("data/cifar-10-batches-py/test_batch", qresnet20_model)
-
-import json
-from pathlib import Path
-
-def notebook_to_clean_py(notebook_path, output_path=None):
-    notebook_path = Path(notebook_path)
-    if output_path is None:
-        output_path = notebook_path.with_suffix(".py")
-    else:
-        output_path = Path(output_path)
-
-    with notebook_path.open("r", encoding="utf-8") as f:
-        nb = json.load(f)
-
-    code_chunks = []
-    for cell in nb.get("cells", []):
-        if cell.get("cell_type") == "code":
-            source = cell.get("source", [])
-            if isinstance(source, list):
-                code = "".join(source)
-            else:
-                code = source
-            if code.strip():
-                code_chunks.append(code.rstrip())
-
-    output_text = "\n\n".join(code_chunks) + "\n"
-
-    with output_path.open("w", encoding="utf-8") as f:
-        f.write(output_text)
-
-    print(f"Saved clean Python file to: {output_path}")
-
-# Example usage:
-notebook_to_clean_py("Quad_Neuron.ipynb")
-# notebook_to_clean_py("input.ipynb", "output.py")
