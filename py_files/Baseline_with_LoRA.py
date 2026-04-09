@@ -206,7 +206,7 @@ def freeze_original_weights(model):
 
 # Modified training function for LoRA
 
-class Quad_neuron():
+class LoRA():
 
     def __init__(self, Relu, num_blocks, block = BasicBlockLoRA, classes = [0,1,2,3,4,5,6,7,8,9]):
         self.model = QResNetLoRA(Relu,block,num_blocks,classes)

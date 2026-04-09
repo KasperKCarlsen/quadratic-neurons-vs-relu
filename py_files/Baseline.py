@@ -95,7 +95,7 @@ class QResNet(nn.Module):
         return self.linear(out)
     
 
-class Quad_neuron():
+class Baseline():
 
     def __init__(self, Relu, num_blocks, block = BasicBlock, classes = [0,1,2,3,4,5,6,7,8,9]):
         self.model = QResNet(Relu,block,num_blocks,classes)
