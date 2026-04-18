@@ -188,19 +188,18 @@ class Quad_adapters():
                 f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}")
 
 
-    def test(X, y, classes):
-        model.eval()  # disable dropout/batchnorm training behavior
+    def test(self,X, y, classes):
+        self.model.eval()  # disable dropout/batchnorm training behavior
         correct = 0
         total = 0
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = model.to(device)
         train_loader = DataLoader(TensorDataset(X, y), batch_size=128)
 
         with torch.no_grad():  # disable gradient computation
             for inputs, labels in train_loader:
                 inputs, labels = inputs.to(device), labels.to(device)
-                outputs = model(inputs)
+                outputs = self.model(inputs)
                 _, predicted = torch.max(outputs, 1)  # get class with highest score
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
