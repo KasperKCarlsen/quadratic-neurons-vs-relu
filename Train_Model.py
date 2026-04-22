@@ -1,4 +1,5 @@
 import torch
+import os
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
@@ -17,37 +18,55 @@ from py_files.Quad_adapters import Quad_adapters
 from py_files.Baseline import Baseline
 from py_files.Baseline_with_LoRA import LoRA
 
-model_names = [Quad_neuron, Quad_adapters, Baseline, LoRA]
-# model_names = ["Quad_neuron", "Quad_adapters", "Baseline", "LoRA"]
+MODEL_MAP = {
+    "Quad_neuron": Quad_neuron,
+    "Quad_adapters": Quad_adapters,
+    "Baseline": Baseline,
+    "LoRA": LoRA,
+}
 
-# python Train_Model.py --model Baseline --ReLU 2 --epoch 5 --num_blocks [3, 3, 3]
+parser = argparse.ArgumentParser(description="Proper ResNets for CIFAR10 in PyTorch")
 
-parser = argparse.ArgumentParser(description='Propert ResNets for CIFAR10 in pytorch')
-parser.add_argument("--model", dest="model", choices=model_names)
-parser.add_argument("--ReLU", dest="ReLU", choices=[0, 1, 2], help="0 is no ReLU, \n1 is ReLU between layers but not in the neurons, \n2 is ReLU between layers AND in the neurons")
-parser.add_argument("--epoch", dest="epoch")
-# parser.add_argument("--start_epoch", dest="start_epoch")
-parser.add_argument("--save_epoch", dest="save_epoch", help="Save the model every x epochs, if it has a higher accuracy", default=1)
-parser.add_argument("--batch_size", dest="batch_size", default=128)
-parser.add_argument("--lr", dest="lr", default=1E-3)
-parser.add_argument("--num_blocks", dest="num_blocks")
-# parser.add_argument("--block_type", dest="block_type", help="The type of block used in the model", default=BasicBlock)
-parser.add_argument("--classes", dest="classes", default=[i for i in range(10)])
-parser.add_argument("--load_path", dest="load_path", default=None)
+parser.add_argument("--model", choices=list(MODEL_MAP.keys()),required=True,help="Model name")
 
+parser.add_argument("--ReLU", type=int, choices=[0, 1, 2], required=True, help="0: no ReLU, 1: between layers only, 2: between layers and inside neurons")
+
+parser.add_argument("--epoch", type=int, required=True)
+
+parser.add_argument("--save_epoch", type=int, default=1, help="Save the model every x epochs if accuracy improves")
+
+parser.add_argument("--batch_size", type=int, default=128)
+
+parser.add_argument("--lr", type=float, default=1e-3)
+
+# Recommended CLI usage:
+# --num_blocks 3 3 3
+parser.add_argument("--num_blocks", type=int, nargs="+", required=True, help="Number of blocks per stage, e.g. --num_blocks 3 3 3")
+
+# If you prefer this style instead:
+# --classes 0 1 2 3 4 5 6 7 8 9
+parser.add_argument("--classes", type=int, nargs="+", default=list(range(10)))
+
+parser.add_argument("--load_path", type=str, default=None)
 
 
 def main():
-    global args, best_prec1
     args = parser.parse_args()
 
-    if not args.model == Quad_adapters:
-        model = args.model(args.ReLU, args.num_blocks, classes=args.classes)
+    model_class = MODEL_MAP[args.model]
+    if model_class is not Quad_adapters:
+        model = model_class(args.ReLU, args.num_blocks, classes=args.classes)
     else:
-        model = args.model(args.ReLU, args.num_blocks, args.load_path, classes=args.classes)
+        model = model_class(
+            args.ReLU,
+            args.num_blocks,
+            args.load_path,
+            classes=args.classes
+        )
 
-    if args.model != Quad_adapters and args.load_path != None:
+    if model_class is not Quad_adapters and args.load_path is not None:
         model.load(args.load_path)
+
 
 
     X = []
@@ -72,21 +91,23 @@ def main():
 
     best_acc = 0
     accs = {}
-    
+    save_dir = f"models/{args.model}_ReLU{args.ReLU}"
+    print(save_dir)
+    os.makedirs(save_dir, exist_ok=True)
     for i in range(args.epoch // args.save_epoch):
-        model.train(X, y, args.batch_size, args.lr, args.save_epoch)
+        model.train(X[0:100], y[0:100], args.batch_size, args.lr, args.save_epoch)
 
-        acc = model.test(X_test, y_test)
+        acc = model.test(X_test[0:100], y_test[0:100])
         accs[i*args.save_epoch] = acc
 
         if acc > best_acc:
             best_acc = acc
-            model.save(f"models/{args.model}_ReLU{args.ReLU}/epoch{i*args.save_epoch}")
+            model.save(f"{save_dir}/epoch{i*args.save_epoch}")
 
-    with open(f"models/{args.model}_ReLU{args.ReLU}/accuracies.pkl", "wb") as f:
+    with open(f"{save_dir}/accuracies.pkl", "wb") as f:
         pickle.dump(accs, f)
     
-    with open(f"models/{args.model}_ReLU{args.ReLU}/arguments.pkl", "wb") as f:
+    with open(f"{save_dir}/arguments.pkl", "wb") as f:
         pickle.dump(args, f)
 
 if __name__ == '__main__':

@@ -276,11 +276,11 @@ class LoRA():
                 correct += (predicted == labels).sum().item()
 
         accuracy = 100 * correct / total
-        print(f'Accuracy: {accuracy:.2f}%')
+        return accuracy
 
 
-    def save(self, name):
-        torch.save(self.model.state_dict(), f"models/{name}")
+    def save(self, path):
+        torch.save(self.model.state_dict(), f"{path}")
 
     def load(self, path):
         self.model.load_state_dict(torch.load(path))

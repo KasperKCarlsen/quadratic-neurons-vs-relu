@@ -29,3 +29,19 @@ def load_batch(path):
 
     images = images.reshape(10000, 3, 32, 32)
     return images, np.array(labels)
+
+
+def freeze_original_weights(model):
+    """Freeze original weights, only train LoRA parameters"""
+    for name, param in model.named_parameters():
+        # For the simple LoRAConv2d implementation
+        if 'lora_A' in name or 'lora_B' in name:
+            param.requires_grad = True
+        elif 'conv' in name and ('lora' not in name):
+            # Freeze original convolution weights
+            param.requires_grad = False
+        elif 'bn' in name or 'linear' in name:
+            # Keep batch norm and final linear layer trainable
+            param.requires_grad = True
+        else:
+            param.requires_grad = False
