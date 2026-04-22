@@ -20,21 +20,35 @@ from py_files.Baseline_with_LoRA import LoRA
 model_names = [Quad_neuron, Quad_adapters, Baseline, LoRA]
 # model_names = ["Quad_neuron", "Quad_adapters", "Baseline", "LoRA"]
 
+# python Train_Model.py --model Baseline --ReLU 2 --epoch 5 --num_blocks [3, 3, 3]
+
 parser = argparse.ArgumentParser(description='Propert ResNets for CIFAR10 in pytorch')
 parser.add_argument("--model", dest="model", choices=model_names)
 parser.add_argument("--ReLU", dest="ReLU", choices=[0, 1, 2], help="0 is no ReLU, \n1 is ReLU between layers but not in the neurons, \n2 is ReLU between layers AND in the neurons")
 parser.add_argument("--epoch", dest="epoch")
-parser.add_argument("--start_epoch", dest="start_epoch")
+# parser.add_argument("--start_epoch", dest="start_epoch")
 parser.add_argument("--save_epoch", dest="save_epoch", help="Save the model every x epochs, if it has a higher accuracy", default=1)
 parser.add_argument("--batch_size", dest="batch_size", default=128)
-parser.add_argument("--lr", dest="lr", default=1E-5)
+parser.add_argument("--lr", dest="lr", default=1E-3)
+parser.add_argument("--num_blocks", dest="num_blocks")
+# parser.add_argument("--block_type", dest="block_type", help="The type of block used in the model", default=BasicBlock)
+parser.add_argument("--classes", dest="classes", default=[i for i in range(10)])
+parser.add_argument("--load_path", dest="load_path", default=None)
+
 
 
 def main():
     global args, best_prec1
     args = parser.parse_args()
 
-    model = args.model
+    if not args.model == Quad_adapters:
+        model = args.model(args.ReLU, args.num_blocks, classes=args.classes)
+    else:
+        model = args.model(args.ReLU, args.num_blocks, args.load_path, classes=args.classes)
+
+    if args.model != Quad_adapters and args.load_path != None:
+        model.load(args.load_path)
+
 
     X = []
     y = []
