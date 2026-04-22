@@ -57,9 +57,23 @@ def main():
 
 
     best_acc = 0
+    accs = {}
+    
     for i in range(args.epoch // args.save_epoch):
         model.train(X, y, args.batch_size, args.lr, args.save_epoch)
-        model.test()
+
+        acc = model.test(X_test, y_test)
+        accs[i*args.save_epoch] = acc
+
+        if acc > best_acc:
+            best_acc = acc
+            model.save(f"models/{args.model}_ReLU{args.ReLU}/epoch{i*args.save_epoch}")
+
+    with open(f"models/{args.model}_ReLU{args.ReLU}/accuracies.pkl", "wb") as f:
+        pickle.dump(accs, f)
+    
+    with open(f"models/{args.model}_ReLU{args.ReLU}/arguments.pkl", "wb") as f:
+        pickle.dump(args, f)
 
 if __name__ == '__main__':
     main()
