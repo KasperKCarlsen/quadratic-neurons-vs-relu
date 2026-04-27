@@ -1,5 +1,5 @@
-loralib==0.1.2
-numpy==2.4.4
-pandas==3.0.2
-torch==2.5.1
-torchvision==0.20.1
+loralib
+numpy
+pandas
+torch
+torchvision
