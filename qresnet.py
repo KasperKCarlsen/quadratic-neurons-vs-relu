@@ -28,7 +28,12 @@ import torch.nn.init as init
 
 from torch.autograd import Variable
 
+<<<<<<< HEAD
+# __all__ = ['ResNet', 'qresnet20', 'qresnet32', 'qresnet44', 'qresnet56', 'qresnet110', 'qresnet1202']
+__all__ = ['ResNet', 'qresnet20']
+=======
 __all__ = ['qresnet20']
+>>>>>>> Karl
 
 
 
@@ -95,7 +100,11 @@ class QResNet(nn.Module):
         super(QResNet, self).__init__()
         self.in_planes = 16
 
+<<<<<<< HEAD
+        self.conv1 = nn.Conv2d(3, 16, kernel_size=3, stride=1, padding=1, bias=False)
+=======
         self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1, padding=1, bias=False)
+>>>>>>> Karl
         self.bn1 = nn.BatchNorm2d(16)
         self.layer1 = self._make_layer(block, 16, num_blocks[0], stride=1)
         self.layer2 = self._make_layer(block, 32, num_blocks[1], stride=2)
