@@ -16,7 +16,7 @@ cd ~/Fagprojekt
 echo "Job started at $(date)"
 echo "Running on node: $(hostname)"
 
-source .venv/bin/activate
+source venv/bin/activate
 
 python Train_Model.py --model Baseline --ReLU 2 --epoch 10 --num_blocks 3 3 3
 
