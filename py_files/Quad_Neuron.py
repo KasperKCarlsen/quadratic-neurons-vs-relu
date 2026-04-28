@@ -124,48 +124,52 @@ class Quad_neuron():
     def __init__(self, Relu, num_blocks, block = BasicBlock, classes = [0,1,2,3,4,5,6,7,8,9], trial = None):
         self.model = QResNet(Relu,block,num_blocks,classes)
         self.trial = trial
+        
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(self.device)
+        
+        # Setup optimizer parameters once per trial if trial is provided
+        if self.trial is not None:
+            self.optimizer_name = self.trial.suggest_categorical("optimizer", ["Adam", "AdamW", "SGD"])
+            self.lr = self.trial.suggest_float("lr", 1e-6, 1e-2, log=True)
+            if self.optimizer_name == "AdamW":
+                self.weight_decay = self.trial.suggest_float("weight_decay", 1e-5, 1e-1, log=True)
+                self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+            elif self.optimizer_name == "SGD":
+                self.momentum = self.trial.suggest_float("momentum", 0.5, 0.99)
+                self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum)
+            else:
+                self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        else:
+            self.optimizer_name = "Adam"
+            self.lr = 1e-3
+            self.optimizer = None # Will be initialized in train() using provided lr
 
-
-    def train(self, X, y, batch_size,lr,  epochs):
+    def train(self, X, y, batch_size, lr, epochs):
         loader = DataLoader(
             TensorDataset(X, y),
             batch_size=batch_size,
             shuffle=True
         )
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model.to(device)
+        self.model.to(self.device)
 
-        optimizer_name = self.trial.suggest_categorical("optimizer", ["Adam", "AdamW", "SGD"])
-        lr = self.trial.suggest_float("lr", 1e-6, 1e-2, log=True)
-
-        if optimizer_name == "AdamW":
-            # Weight decay is ONLY suggested and used if AdamW is chosen
-            weight_decay = self.trial.suggest_float("weight_decay", 1e-5, 1e-1, log=True)
-            optimizer = torch.optim.AdamW( lr=lr, weight_decay=weight_decay)
-            
-        elif optimizer_name == "SGD":
-            # Maybe SGD uses momentum instead of weight decay
-            momentum = self.trial.suggest_float("momentum", 0.5, 0.99)
-            optimizer = torch.optim.SGD(self.model.parameters(), lr=lr, momentum=momentum)
-            
-        elif optimizer_name == "Adam":
-            # Default Adam without weight decay
-            optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        if self.optimizer is None:
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
 
         criterion = nn.CrossEntropyLoss()
 
-        for epoch in range(1):
+        for epoch in range(epochs):
             self.model.train()
             total, correct, loss_sum = 0, 0, 0
 
             for images, labels in loader:
-                images, labels = images.to(device), labels.to(device)
+                images, labels = images.to(self.device), labels.to(self.device)
 
-                optimizer.zero_grad()
+                self.optimizer.zero_grad()
                 outputs = self.model(images)
                 loss = criterion(outputs, labels)
                 loss.backward()
-                optimizer.step()
+                self.optimizer.step()
 
                 loss_sum += loss.item() * labels.size(0)
                 preds = outputs.argmax(1)

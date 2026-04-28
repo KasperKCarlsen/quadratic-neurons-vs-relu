@@ -134,8 +134,10 @@ def objective(trial):
     save_dir = f"models/{args.model}_ReLU{args.ReLU}"
     print(save_dir)
     os.makedirs(save_dir, exist_ok=True)
+    
+    batch_size = trial.suggest_int("batch_size", 32, 512)
+    
     for i in range(args.epoch):
-        batch_size = trial.suggest_int("batch_size", 32, 512)
         model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
 
         acc = model.test(X_test, y_test)
