@@ -32,6 +32,7 @@ class Config:
     load_path: str | None = None
 
     # Training settings
+    val: bool = True
     epoch: int = 10
     save_epoch: int = 1
     batch_size: int = 128
@@ -47,121 +48,99 @@ class Config:
     train_limit: int | None = 100
     test_limit: int | None = 100
 
-    def validate(self) -> None:
-        if self.model not in MODEL_MAP:
-            raise ValueError(f"Unknown model '{self.model}'. Choose from: {list(MODEL_MAP)}")
-        if self.ReLU not in (0, 1, 2):
-            raise ValueError("ReLU must be 0, 1, or 2")
-        if self.epoch <= 0:
-            raise ValueError("epoch must be positive")
-        if self.save_epoch <= 0:
-            raise ValueError("save_epoch must be positive")
-        if self.batch_size <= 0:
-            raise ValueError("batch_size must be positive")
-        if not 0 < self.test_split < 1:
-            raise ValueError("test_split must be between 0 and 1")
 
 
-def build_model(config: Config):
-    model_class = MODEL_MAP[config.model]
+def main():
+    args = Config()
 
-    if model_class is Quad_adapters:
-        model = model_class(
-            config.ReLU,
-            list(config.num_blocks),
-            config.load_path,
-            classes=list(config.classes),
-        )
+    model_class = MODEL_MAP[args.model]
+    if model_class is not Quad_adapters:
+        model = model_class(args.ReLU, args.num_blocks, classes=args.classes)
     else:
         model = model_class(
-            config.ReLU,
-            list(config.num_blocks),
-            classes=list(config.classes),
+            args.ReLU,
+            args.num_blocks,
+            args.load_path,
+            classes=args.classes
         )
-        if config.load_path is not None:
-            model.load(config.load_path)
 
-    return model
+    if model_class is not Quad_adapters and args.load_path is not None:
+        model.load(args.load_path)
 
 
-def load_cifar10_training_batches(data_dir: str):
     X = []
     y = []
 
-    for i in range(1, 6):
-        images, labels = load_batch(os.path.join(data_dir, f"data_batch_{i}"))
-        X.append(images)
-        y.append(labels)
+    if args.val:
+        for i in range(1, 6):
+            images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
+            X.append(images)
+            y.append(labels)
+        images, labels = load_batch()
 
-    X = torch.from_numpy(np.concatenate(X)).float() / 255.0
-    y = torch.from_numpy(np.concatenate(y)).long()
-    return X, y
+        X = np.concatenate(X)
+        y = np.concatenate(y)
 
+        X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
+        y = torch.from_numpy(y).long()
 
-def split_dataset(X: torch.Tensor, y: torch.Tensor, test_split: float, seed: int):
-    dataset = TensorDataset(X, y)
-    train_size = int(len(dataset) * (1 - test_split))
-    test_size = len(dataset) - train_size
+        # splitting up the dataset - AI used from here...
+        dataset = TensorDataset(X, y)
+        train_size = int(len(dataset) * (1 - args.test_split))
+        test_size = len(dataset) - train_size
+        train_dataset, test_dataset = torch.utils.data.random_split(
+            dataset,
+            [train_size, test_size],
+            generator=torch.Generator().manual_seed(42)
+        )
 
-    train_dataset, test_dataset = torch.utils.data.random_split(
-        dataset,
-        [train_size, test_size],
-        generator=torch.Generator().manual_seed(seed),
-    )
+        X_train = torch.stack([train_dataset[i][0] for i in range(len(train_dataset))])
+        y_train = torch.tensor([train_dataset[i][1] for i in range(len(train_dataset))])
 
-    X_train = torch.stack([train_dataset[i][0] for i in range(len(train_dataset))])
-    y_train = torch.tensor([train_dataset[i][1] for i in range(len(train_dataset))])
+        X_test = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))])
+        y_test = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))])
+    
+    else:
+        for i in range(1, 6):
+            images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
+            X.append(images)
+            y.append(labels)
 
-    X_test = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))])
-    y_test = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))])
+        X = np.concatenate(X)
+        y = np.concatenate(y)
 
-    return X_train, y_train, X_test, y_test
+        X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
+        y = torch.from_numpy(y).long()
 
+        X_train = torch.stack([train_dataset[i][0] for i in range(len(train_dataset))])
+        y_train = torch.tensor([train_dataset[i][1] for i in range(len(train_dataset))])
 
-def maybe_limit(X: torch.Tensor, y: torch.Tensor, limit: int | None):
-    if limit is None:
-        return X, y
-    return X[:limit], y[:limit]
+        images_test, labels_test = load_batch(f"data/cifar-10-batches-py/test_batch")
 
+        X_test = torch.from_numpy(images_test).float() / 255.0  # Normalize to [0, 1]
+        y_test = torch.from_numpy(labels_test).long()
 
-def main() -> None:
-    config = Config()
-    config.validate()
-
-    torch.manual_seed(config.seed)
-    np.random.seed(config.seed)
-
-    model = build_model(config)
-
-    X, y = load_cifar10_training_batches(config.data_dir)
-    X_train, y_train, X_test, y_test = split_dataset(X, y, config.test_split, config.seed)
-
-    X_train, y_train = maybe_limit(X_train, y_train, config.train_limit)
-    X_test, y_test = maybe_limit(X_test, y_test, config.test_limit)
 
     best_acc = 0
     accs = {}
-    save_dir = os.path.join(config.model_root, f"{config.model}_ReLU{config.ReLU}")
+    save_dir = f"models/{args.model}_ReLU{args.ReLU}"
     print(save_dir)
     os.makedirs(save_dir, exist_ok=True)
+    for i in range(args.epoch // args.save_epoch):
+        model.train(X_train[0:100], y_train[0:100], args.batch_size, args.lr, args.save_epoch)
 
-    for i in range(config.epoch // config.save_epoch):
-        epoch_number = i * config.save_epoch
-        model.train(X_train, y_train, config.batch_size, config.lr, config.save_epoch)
-
-        acc = model.test(X_test, y_test)
-        accs[epoch_number] = acc
+        acc = model.test(X_test[0:100], y_test[0:100])
+        accs[i*args.save_epoch] = acc
 
         if acc > best_acc:
             best_acc = acc
-            model.save(os.path.join(save_dir, f"epoch{epoch_number}"))
+            model.save(f"{save_dir}/epoch{i*args.save_epoch}")
 
-    with open(os.path.join(save_dir, "accuracies.pkl"), "wb") as f:
+    with open(f"{save_dir}/accuracies.pkl", "wb") as f:
         pickle.dump(accs, f)
+    
+    with open(f"{save_dir}/arguments.pkl", "wb") as f:
+        pickle.dump(args, f)
 
-    with open(os.path.join(save_dir, "config.pkl"), "wb") as f:
-        pickle.dump(asdict(config), f)
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

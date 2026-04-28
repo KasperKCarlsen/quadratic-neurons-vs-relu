@@ -73,33 +73,44 @@ def main():
     X = []
     y = []
 
-    for i in range(1, 6):
-        images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
-        X.append(images)
-        y.append(labels)
 
-    X = np.concatenate(X)
-    y = np.concatenate(y)
+    if args.val:
+        for i in range(1, 6):
+            images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
+            X.append(images)
+            y.append(labels)
+        images, labels = load_batch()
 
-    X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
-    y = torch.from_numpy(y).long()
 
-    # splitting up the dataset - AI used from here...
-    dataset = TensorDataset(X, y)
-    train_size = int(len(dataset) * (1 - args.test_split))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = torch.utils.data.random_split(
-        dataset,
-        [train_size, test_size],
-        generator=torch.Generator().manual_seed(42)
-    )
+    else:
+        for i in range(1, 6):
+            images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
+            X.append(images)
+            y.append(labels)
+        images, labels = load_batch()
 
-    X_train = torch.stack([train_dataset[i][0] for i in range(len(train_dataset))])
-    y_train = torch.tensor([train_dataset[i][1] for i in range(len(train_dataset))])
+        X = np.concatenate(X)
+        y = np.concatenate(y)
 
-    X_test = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))])
-    y_test = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))])
-    # ...to here
+        X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
+        y = torch.from_numpy(y).long()
+
+        # splitting up the dataset - AI used from here...
+        dataset = TensorDataset(X, y)
+        train_size = int(len(dataset) * (1 - args.test_split))
+        test_size = len(dataset) - train_size
+        train_dataset, test_dataset = torch.utils.data.random_split(
+            dataset,
+            [train_size, test_size],
+            generator=torch.Generator().manual_seed(42)
+        )
+
+        X_train = torch.stack([train_dataset[i][0] for i in range(len(train_dataset))])
+        y_train = torch.tensor([train_dataset[i][1] for i in range(len(train_dataset))])
+
+        X_test = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))])
+        y_test = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))])
+        # ...to here
 
 
     best_acc = 0
