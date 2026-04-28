@@ -162,7 +162,12 @@ def objective(trial):
 
 
 if __name__ == '__main__':
-    study = optuna.create_study(direction="maximize")
+    study = optuna.create_study(
+    study_name="my_model_optimization",
+    storage="sqlite:///optuna_study.db",  # This creates an SQLite file in your folder
+    load_if_exists=True,
+    direction="maximize"
+)
 
     study.optimize(objective, n_trials=100, timeout=600)
 
