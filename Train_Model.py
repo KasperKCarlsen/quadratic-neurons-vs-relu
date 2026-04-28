@@ -81,14 +81,6 @@ def main():
             y.append(labels)
         images, labels = load_batch()
 
-
-    else:
-        for i in range(1, 6):
-            images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
-            X.append(images)
-            y.append(labels)
-        images, labels = load_batch()
-
         X = np.concatenate(X)
         y = np.concatenate(y)
 
@@ -110,7 +102,26 @@ def main():
 
         X_test = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))])
         y_test = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))])
-        # ...to here
+    
+    else:
+        for i in range(1, 6):
+            images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
+            X.append(images)
+            y.append(labels)
+
+        X = np.concatenate(X)
+        y = np.concatenate(y)
+
+        X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
+        y = torch.from_numpy(y).long()
+
+        X_train = torch.stack([train_dataset[i][0] for i in range(len(train_dataset))])
+        y_train = torch.tensor([train_dataset[i][1] for i in range(len(train_dataset))])
+
+        images_test, labels_test = load_batch(f"data/cifar-10-batches-py/test_batch")
+
+        X_test = torch.from_numpy(images_test).float() / 255.0  # Normalize to [0, 1]
+        y_test = torch.from_numpy(labels_test).long()
 
 
     best_acc = 0
