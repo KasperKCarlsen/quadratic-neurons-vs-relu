@@ -11,6 +11,8 @@ import torchvision.transforms as transforms
 import pickle
 import numpy as np
 import argparse
+import optuna
+from optuna.trial import TrialState
 
 from funcs import *
 from py_files.Quad_Neuron import Quad_neuron
@@ -55,18 +57,20 @@ parser.add_argument("--load_path", type=str, default=None)
 parser.add_argument("--test_split", dest="test_split", type=float, default=0.2, help="Fraction of the loaded data to reserve for testing")
 
 
-def main():
+def objective(trial):
     args = parser.parse_args()
+    
 
     model_class = MODEL_MAP[args.model]
     if model_class is not Quad_adapters:
-        model = model_class(args.ReLU, args.num_blocks, classes=args.classes)
+        model = model_class(args.ReLU, args.num_blocks, classes=args.classes,trial=trial)
     else:
         model = model_class(
             args.ReLU,
             args.num_blocks,
             args.load_path,
-            classes=args.classes
+            classes=args.classes,
+            trial=trial
         )
 
     if model_class is not Quad_adapters and args.load_path is not None:
@@ -130,8 +134,9 @@ def main():
     save_dir = f"models/{args.model}_ReLU{args.ReLU}"
     print(save_dir)
     os.makedirs(save_dir, exist_ok=True)
-    for i in range(args.epoch // args.save_epoch):
-        model.train(X_train, y_train, args.batch_size, args.lr, args.save_epoch)
+    for i in range(args.epoch):
+        batch_size = trial.suggest_int("batch_size", 32, 512)
+        model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
 
         acc = model.test(X_test, y_test)
         accs[i*args.save_epoch] = acc
@@ -140,11 +145,38 @@ def main():
             best_acc = acc
             model.save(f"{save_dir}/epoch{i*args.save_epoch}")
 
+        trial.report(acc, i)
+
+        if trial.should_prune():
+            raise optuna.exceptions.TrialPruned()
+    
     with open(f"{save_dir}/accuracies.pkl", "wb") as f:
         pickle.dump(accs, f)
     
     with open(f"{save_dir}/arguments.pkl", "wb") as f:
         pickle.dump(args, f)
 
+    return acc
+
+
 if __name__ == '__main__':
-    main()
+    study = optuna.create_study(direction="maximize")
+
+    study.optimize(objective, n_trials=100, timeout=600)
+
+    pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
+    complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
+
+    print("Study statistics: ")
+    print("  Number of finished trials: ", len(study.trials))
+    print("  Number of pruned trials: ", len(pruned_trials))
+    print("  Number of complete trials: ", len(complete_trials))
+
+    print("Best trial:")
+    trial = study.best_trial
+
+    print("  Value: ", trial.value)
+
+    print("  Params: ")
+    for key, value in trial.params.items():
+        print("    {}: {}".format(key, value))
