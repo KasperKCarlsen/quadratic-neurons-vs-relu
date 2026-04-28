@@ -1,8 +1,8 @@
 #!/bin/bash
 #BSUB -J Train_Model_config.py
 #BSUB -q gpua10
-#BSUB -o /logs/Train_model_config_%J.out
-#BSUB -e /logs/Train_model_config_%J.err
+#BSUB -o ~/Fagprojekt/logs/Train_model_config_%J.out
+#BSUB -e ~/Fagprojekt/logs/Train_model_config_%J.err
 #BSUB -B
 #BSUB -N
 #BSUB -u s234813@dtu.dk
