@@ -37,6 +37,9 @@ parser.add_argument("--save_epoch", type=int, default=1, help="Save the model ev
 
 parser.add_argument("--batch_size", type=int, default=128)
 
+parser.add_argument("--val", dest="val",type = bool, default=False,  help="Whether to use a validation split from the training data instead of the official test set")
+
+
 parser.add_argument("--lr", type=float, default=1e-3)
 
 # Recommended CLI usage:
@@ -112,11 +115,9 @@ def main():
         X = np.concatenate(X)
         y = np.concatenate(y)
 
-        X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
-        y = torch.from_numpy(y).long()
+        X_train = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
+        y_train = torch.from_numpy(y).long()
 
-        X_train = torch.stack([train_dataset[i][0] for i in range(len(train_dataset))])
-        y_train = torch.tensor([train_dataset[i][1] for i in range(len(train_dataset))])
 
         images_test, labels_test = load_batch(f"data/cifar-10-batches-py/test_batch")
 
@@ -130,9 +131,9 @@ def main():
     print(save_dir)
     os.makedirs(save_dir, exist_ok=True)
     for i in range(args.epoch // args.save_epoch):
-        model.train(X_train[0:100], y_train[0:100], args.batch_size, args.lr, args.save_epoch)
+        model.train(X_train, y_train, args.batch_size, args.lr, args.save_epoch)
 
-        acc = model.test(X_test[0:100], y_test[0:100])
+        acc = model.test(X_test, y_test)
         accs[i*args.save_epoch] = acc
 
         if acc > best_acc:
