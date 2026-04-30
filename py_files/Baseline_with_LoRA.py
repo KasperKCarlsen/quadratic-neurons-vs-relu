@@ -93,10 +93,8 @@ class LoRAConv2d(nn.Module):
 class BasicBlockLoRA(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, config, stride=1, option='A', rank=4):
+    def __init__(self, in_planes, planes, stride=1, option='A', rank=4):
         super().__init__()
-        self.config = config
-
         # Replace regular Conv2d with LoRAConv2d for each color channel
         self.conv1r = LoRAConv2d(in_planes, planes, 3, stride, 1, bias=True, rank=rank)
         self.conv1g = LoRAConv2d(in_planes, planes, 3, stride, 1, bias=True, rank=rank)
@@ -152,28 +150,27 @@ class BasicBlockLoRA(nn.Module):
 
 # Modified QResNet with LoRA
 class QResNetLoRA(nn.Module):
-    def __init__(self, config, block, num_blocks, rank=4):
+    def __init__(self,Relu, block, num_blocks, classes, rank=4):
         super().__init__()
-        self.config = config
         self.in_planes = 16
         self.rank = rank
 
         # First conv layer (can also use LoRA or keep frozen)
-        self.conv1 = LoRAConv2d(config.input_channels, 16, 3, 1, 1, bias=False, rank=rank)
+        self.conv1 = LoRAConv2d(3, 16, 3, 1, 1, bias=False, rank=rank)
         self.bn1 = nn.BatchNorm2d(16)
 
         self.layer1 = self._make_layer(block, 16, num_blocks[0], rank=rank)
         self.layer2 = self._make_layer(block, 32, num_blocks[1], stride=2, rank=rank)
         self.layer3 = self._make_layer(block, 64, num_blocks[2], stride=2, rank=rank)
 
-        self.linear = nn.Linear(64, config.num_classes)
+        self.linear = nn.Linear(64, len(classes))
 
     def _make_layer(self, block, planes, num_blocks, stride=1, rank=4):
         strides = [stride] + [1]*(num_blocks-1)
         layers = []
 
         for s in strides:
-            layers.append(block(self.in_planes, planes, self.config, s, rank=rank))
+            layers.append(block(self.in_planes, planes, s, rank=rank))
             self.in_planes = planes
 
         return nn.Sequential(*layers)
@@ -208,11 +205,23 @@ def freeze_original_weights(model):
 
 class LoRA():
 
-    def __init__(self, Relu, num_blocks, block = BasicBlockLoRA, classes = [0,1,2,3,4,5,6,7,8,9]):
+    def __init__(self, Relu, num_blocks, lr_op, wd, momentum, optimizer, block = BasicBlockLoRA, classes = [0,1,2,3,4,5,6,7,8,9],):
+
+
         self.model = QResNetLoRA(Relu,block,num_blocks,classes)
+        if optimizer == torch.optim.Adam:
+            self.optimizer = optimizer(filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr_op)
+        elif optimizer == torch.optim.AdamW:
+            self.optimizer = optimizer(filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr_op, weight_decay=wd, betas=(0.9, 0.999), eps=1e-8, amsgrad=False)
+        elif optimizer == torch.optim.SGD:
+            self.optimizer = optimizer(filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr_op, momentum=momentum, dampening = 0, nesterov=False)
+
+        self.criterion = nn.CrossEntropyLoss()
 
 
-    def train(self, X, y, batch_size, lr, epochs,rank=4):
+
+
+    def train(self, X, y, batch_size, lr, epochs, rank=4):
         loader = DataLoader(
             TensorDataset(X, y),
             batch_size=batch_size,
@@ -220,7 +229,11 @@ class LoRA():
         )
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(device)
+        optimizer = self.optimizer
+        criterion = self.criterion
 
+        acc_train = {}
+        loss_train = {}
         
         # Freeze original weights, only train LoRA parameters
         freeze_original_weights(self.model)
@@ -229,9 +242,6 @@ class LoRA():
         trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         total_params = sum(p.numel() for p in self.model.parameters())
         print(f"Trainable parameters: {trainable_params:,} / {total_params:,} ({100*trainable_params/total_params:.2f}%)")
-
-        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=self.lr)
-        criterion = nn.CrossEntropyLoss()
 
         for epoch in range(epochs):
             self.model.train()
@@ -251,9 +261,11 @@ class LoRA():
                 correct += (preds == labels).sum().item()
                 total += labels.size(0)
 
-            print(f"Epoch {epoch+1}/{epochs} | "
-                f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}")
 
+            acc_train[epoch] = correct/total
+            loss_train[epoch] = loss_sum/total
+
+        return acc_train, loss_train
 
 
 
@@ -276,6 +288,8 @@ class LoRA():
                 correct += (predicted == labels).sum().item()
 
         accuracy = 100 * correct / total
+
+        print(f"Acc: {accuracy:.4f}")
         return accuracy
 
 

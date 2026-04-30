@@ -120,8 +120,22 @@ class QResNet(nn.Module):
 
 class Quad_adapters():
 
-    def __init__(self, Relu, num_blocks, pretrained_path , block = BasicBlock, classes = [0,1,2,3,4,5,6,7,8,9]):
+    def __init__(self, Relu, num_blocks, pretrained_path, lr_op, wd, momentum, optimizer, block = BasicBlock, classes = [0,1,2,3,4,5,6,7,8,9],):
+
+
         self.model = QResNet(Relu,block,num_blocks,classes)
+        if optimizer == torch.optim.Adam:
+            self.optimizer = optimizer(filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr_op)
+        elif optimizer == torch.optim.AdamW:
+            self.optimizer = optimizer(filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr_op, weight_decay=wd, betas=(0.9, 0.999), eps=1e-8, amsgrad=False)
+        elif optimizer == torch.optim.SGD:
+            self.optimizer = optimizer(filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr_op, momentum=momentum, dampening = 0, nesterov=False)
+
+        self.criterion = nn.CrossEntropyLoss()
+
+        #optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr)
+
+
 
 
 
@@ -156,16 +170,18 @@ class Quad_adapters():
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(device)
+        optimizer = self.optimizer
+        criterion = self.criterion
+
 
         # Only optimize parameters that require gradients
-        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr)
-        criterion = nn.CrossEntropyLoss()
-
         # Verify what's being trained
         trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         total_params = sum(p.numel() for p in self.model.parameters())
         print(f"Trainable: {trainable_params:,} / {total_params:,} params ({100*trainable_params/total_params:.1f}%)")
 
+        acc_train = {}
+        loss_train = {}
         for epoch in range(epochs):
             self.model.train()
             total, correct, loss_sum = 0, 0, 0
@@ -186,9 +202,13 @@ class Quad_adapters():
 
             print(f"Epoch {epoch+1}/{epochs} | "
                 f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}")
+            acc_train[epoch] = correct/total
+            loss_train[epoch] = loss_sum/total
+
+        return acc_train, loss_train
 
 
-    def test(self,X, y, classes):
+    def test(self,X, y):
         self.model.eval()  # disable dropout/batchnorm training behavior
         correct = 0
         total = 0
@@ -205,6 +225,8 @@ class Quad_adapters():
                 correct += (predicted == labels).sum().item()
 
         accuracy = 100 * correct / total
+        print(f"Acc: {accuracy:.4f}")
+
         return accuracy
 
 

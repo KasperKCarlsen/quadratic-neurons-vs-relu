@@ -18,6 +18,16 @@ echo "Running on node: $(hostname)"
 
 source venv/bin/activate
 
-python Train_Model.py --model Baseline --ReLU 2 --epoch 10 --num_blocks 3 3 3
+python Train_Model.py --model Baseline --ReLU 2 --epoch 2 --num_blocks 1 1 1 --val True --lr 0.001 --lr_op 0.001 --Weight_decay 0.01 --optimizer Adam
+python Train_Model.py --model Baseline --ReLU 2 --epoch 2 --num_blocks 1 1 1 --val True --lr 0.001 --lr_op 0.001 --Weight_decay 0.01 --optimizer AdamW
+python Train_Model.py --model Baseline --ReLU 2 --epoch 2 --num_blocks 1 1 1 --val True --lr 0.001 --lr_op 0.001 --Weight_decay 0.01 --optimizer SGD
+python Train_Model.py --model LoRA --ReLU 2 --epoch 2 --num_blocks 1 1 1 --val True --lr 0.001 --lr_op 0.001 --Weight_decay 0.01 --optimizer Adam
+python Train_Model.py --model Quad_adapters --ReLU 0 --epoch 2 --num_blocks 1 1 1 --val True --lr 0.001 --lr_op 0.001 --Weight_decay 0.01 --optimizer Adam
+python Train_Model.py --model Quad_adapters --ReLU 1 --epoch 2 --num_blocks 1 1 1 --val True --lr 0.001 --lr_op 0.001 --Weight_decay 0.01 --optimizer Adam
+python Train_Model.py --model Quad_adapters --ReLU 2 --epoch 2 --num_blocks 1 1 1 --val True --lr 0.001 --lr_op 0.001 --Weight_decay 0.01 --optimizer Adam
+python Train_Model.py --model Quad_neuron --ReLU 0 --epoch 2 --num_blocks 1 1 1 --val True --lr 0.001 --lr_op 0.001 --Weight_decay 0.01 --optimizer Adam
+python Train_Model.py --model Quad_neuron --ReLU 1 --epoch 2 --num_blocks 1 1 1 --val True --lr 0.001 --lr_op 0.001 --Weight_decay 0.01 --optimizer Adam
+python Train_Model.py --model Quad_neuron --ReLU 2 --epoch 2 --num_blocks 1 1 1 --val True --lr 0.001 --lr_op 0.001 --Weight_decay 0.01 --optimizer Adam
+
 
 echo "Job finished at $(date)"

@@ -97,8 +97,19 @@ class QResNet(nn.Module):
 
 class Baseline():
 
-    def __init__(self, Relu, num_blocks, block = BasicBlock, classes = [0,1,2,3,4,5,6,7,8,9]):
+    def __init__(self, Relu, num_blocks, lr_op, wd, momentum, optimizer, block = BasicBlock, classes = [0,1,2,3,4,5,6,7,8,9],):
+
+
         self.model = QResNet(Relu,block,num_blocks,classes)
+        if optimizer == torch.optim.Adam:
+            self.optimizer = optimizer(self.model.parameters(), lr=lr_op)
+        elif optimizer == torch.optim.AdamW:
+            self.optimizer = optimizer(self.model.parameters(), lr=lr_op, weight_decay=wd, betas=(0.9, 0.999), eps=1e-8, amsgrad=False)
+        elif optimizer == torch.optim.SGD:
+            self.optimizer = optimizer(self.model.parameters(), lr=lr_op, momentum=momentum, dampening = 0, nesterov=False)
+
+        self.criterion = nn.CrossEntropyLoss()
+
 
 
     def train(self, X, y, batch_size, lr, epochs):
@@ -110,8 +121,11 @@ class Baseline():
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model.to(device)
 
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-        criterion = nn.CrossEntropyLoss()
+        optimizer = self.optimizer
+        criterion = self.criterion
+
+        acc_train = {}
+        loss_train = {}
 
         for epoch in range(epochs):
             self.model.train()
@@ -133,8 +147,10 @@ class Baseline():
 
             print(f"Epoch {epoch+1}/{epochs} | "
                 f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}")
+            acc_train[epoch] = correct/total
+            loss_train[epoch] = loss_sum/total
 
-        return None
+        return acc_train, loss_train
 
 
 
@@ -157,6 +173,9 @@ class Baseline():
                 correct += (predicted == labels).sum().item()
 
         accuracy = 100 * correct / total
+
+        print(f"Acc: {accuracy:.4f}")
+        
         return accuracy
 
     def save(self, path):
