@@ -194,7 +194,7 @@ if __name__ == "__main__":
 
     study = optuna.create_study(
         study_name=f"{args.model}_with_ReLU{args.ReLU}_optimization",
-        storage="sqlite:///optuna_studies.db",
+        storage=f"sqlite:///optuna_databases/{args.model}_with_ReLU{args.ReLU}_study.db",
         load_if_exists=True,
         direction="maximize",
     )
