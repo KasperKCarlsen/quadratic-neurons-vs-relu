@@ -29,24 +29,49 @@ MODEL_MAP = {
 
 parser = argparse.ArgumentParser(description="Proper ResNets for CIFAR10 in PyTorch")
 
-parser.add_argument("--model", choices=list(MODEL_MAP.keys()),required=True,help="Model name")
+parser.add_argument(
+    "--model", choices=list(MODEL_MAP.keys()), required=True, help="Model name"
+)
 
-parser.add_argument("--ReLU", type=int, choices=[0, 1, 2], required=True, help="0: no ReLU, 1: between layers only, 2: between layers and inside neurons")
+parser.add_argument(
+    "--ReLU",
+    type=int,
+    choices=[0, 1, 2],
+    required=True,
+    help="0: no ReLU, 1: between layers only, 2: between layers and inside neurons",
+)
 
 parser.add_argument("--epoch", type=int, required=True)
 
-parser.add_argument("--save_epoch", type=int, default=1, help="Save the model every x epochs if accuracy improves")
+parser.add_argument(
+    "--save_epoch",
+    type=int,
+    default=1,
+    help="Save the model every x epochs if accuracy improves",
+)
 
 parser.add_argument("--batch_size", type=int, default=128)
 
-parser.add_argument("--val", dest="val",type = bool, default=False,  help="Whether to use a validation split from the training data instead of the official test set")
+parser.add_argument(
+    "--val",
+    dest="val",
+    type=bool,
+    default=False,
+    help="Whether to use a validation split from the training data instead of the official test set",
+)
 
 
 parser.add_argument("--lr", type=float, default=1e-3)
 
 # Recommended CLI usage:
 # --num_blocks 3 3 3
-parser.add_argument("--num_blocks", type=int, nargs="+", required=True, help="Number of blocks per stage, e.g. --num_blocks 3 3 3")
+parser.add_argument(
+    "--num_blocks",
+    type=int,
+    nargs="+",
+    required=True,
+    help="Number of blocks per stage, e.g. --num_blocks 3 3 3",
+)
 
 # If you prefer this style instead:
 # --classes 0 1 2 3 4 5 6 7 8 9
@@ -54,32 +79,37 @@ parser.add_argument("--classes", type=int, nargs="+", default=list(range(10)))
 
 parser.add_argument("--load_path", type=str, default=None)
 
-parser.add_argument("--test_split", dest="test_split", type=float, default=0.2, help="Fraction of the loaded data to reserve for testing")
+parser.add_argument(
+    "--test_split",
+    dest="test_split",
+    type=float,
+    default=0.2,
+    help="Fraction of the loaded data to reserve for testing",
+)
 
 
 def objective(trial):
     args = parser.parse_args()
-    
 
     model_class = MODEL_MAP[args.model]
     if model_class is not Quad_adapters:
-        model = model_class(args.ReLU, args.num_blocks, classes=args.classes,trial=trial)
+        model = model_class(
+            args.ReLU, args.num_blocks, classes=args.classes, trial=trial
+        )
     else:
         model = model_class(
             args.ReLU,
             args.num_blocks,
             args.load_path,
             classes=args.classes,
-            trial=trial
+            trial=trial,
         )
 
     if model_class is not Quad_adapters and args.load_path is not None:
         model.load(args.load_path)
 
-
     X = []
     y = []
-
 
     if args.val:
         for i in range(1, 6):
@@ -101,7 +131,7 @@ def objective(trial):
         train_dataset, test_dataset = torch.utils.data.random_split(
             dataset,
             [train_size, test_size],
-            generator=torch.Generator().manual_seed(42)
+            generator=torch.Generator().manual_seed(42),
         )
 
         X_train = torch.stack([train_dataset[i][0] for i in range(len(train_dataset))])
@@ -109,7 +139,7 @@ def objective(trial):
 
         X_test = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))])
         y_test = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))])
-    
+
     else:
         for i in range(1, 6):
             images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
@@ -122,26 +152,24 @@ def objective(trial):
         X_train = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
         y_train = torch.from_numpy(y).long()
 
-
         images_test, labels_test = load_batch(f"data/cifar-10-batches-py/test_batch")
 
         X_test = torch.from_numpy(images_test).float() / 255.0  # Normalize to [0, 1]
         y_test = torch.from_numpy(labels_test).long()
-
 
     best_acc = 0
     accs = {}
     save_dir = f"models/{args.model}_ReLU{args.ReLU}"
     print(save_dir)
     os.makedirs(save_dir, exist_ok=True)
-    
+
     batch_size = trial.suggest_int("batch_size", 32, 512)
-    
+
     for i in range(args.epoch):
         model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
 
         acc = model.test(X_test, y_test)
-        accs[i*args.save_epoch] = acc
+        accs[i * args.save_epoch] = acc
 
         if acc > best_acc:
             best_acc = acc
@@ -149,25 +177,27 @@ def objective(trial):
 
         trial.report(acc, i)
 
-        if trial.should_prune():
-            raise optuna.exceptions.TrialPruned()
-    
     with open(f"{save_dir}/accuracies.pkl", "wb") as f:
         pickle.dump(accs, f)
-    
+
     with open(f"{save_dir}/arguments.pkl", "wb") as f:
         pickle.dump(args, f)
 
     return acc
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    args = parser.parse_args()
+
+    # Create a directory for Optuna databases
+    os.makedirs("optuna_databases", exist_ok=True)
+
     study = optuna.create_study(
-    study_name="my_model_optimization",
-    storage="sqlite:///optuna_study.db",  # This creates an SQLite file in your folder
-    load_if_exists=True,
-    direction="maximize"
-)
+        study_name=f"{args.model}_with_ReLU{args.ReLU}_optimization",
+        storage="sqlite:///optuna_studies.db",
+        load_if_exists=True,
+        direction="maximize",
+    )
 
     study.optimize(objective, n_trials=100, timeout=600)
 

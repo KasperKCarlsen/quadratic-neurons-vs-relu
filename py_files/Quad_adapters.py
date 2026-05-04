@@ -10,6 +10,7 @@ import torchvision.transforms as transforms
 import pickle
 import numpy as np
 
+
 class LambdaLayer(nn.Module):
     def __init__(self, lambd):
         super(LambdaLayer, self).__init__()
@@ -22,7 +23,7 @@ class LambdaLayer(nn.Module):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, relu, stride=1, option='A'):
+    def __init__(self, in_planes, planes, relu, stride=1, option="A"):
         super().__init__()
         self.relu = relu
 
@@ -55,18 +56,19 @@ class BasicBlock(nn.Module):
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != planes:
             self.shortcut = LambdaLayer(
-                lambda x: F.pad(x[:, :, ::2, ::2],
-                                (0, 0, 0, 0, planes//4, planes//4))
+                lambda x: F.pad(
+                    x[:, :, ::2, ::2], (0, 0, 0, 0, planes // 4, planes // 4)
+                )
             )
 
     def forward(self, x):
 
-        out = self.bn1(self.conv1r(x)*self.conv1g(x) + self.conv1b(x.pow(2)))
+        out = self.bn1(self.conv1r(x) * self.conv1g(x) + self.conv1b(x.pow(2)))
 
         if self.relu == 2:
             out = F.relu(out)
 
-        out = self.bn2(self.conv2r(out)*self.conv2g(out) + self.conv2b(out.pow(2)))
+        out = self.bn2(self.conv2r(out) * self.conv2g(out) + self.conv2b(out.pow(2)))
         out += self.shortcut(x)
 
         if self.relu in [1, 2]:
@@ -93,7 +95,7 @@ class QResNet(nn.Module):
         self.linear = nn.Linear(64, len(self.classes))
 
     def _make_layer(self, block, planes, num_blocks, stride=1):
-        strides = [stride] + [1]*(num_blocks-1)
+        strides = [stride] + [1] * (num_blocks - 1)
         layers = []
 
         for s in strides:
@@ -118,77 +120,125 @@ class QResNet(nn.Module):
         return self.linear(out)
 
 
-class Quad_adapters():
+class Quad_adapters:
 
-    def __init__(self, Relu, num_blocks, pretrained_path , block = BasicBlock, classes = [0,1,2,3,4,5,6,7,8,9]):
-        self.model = QResNet(Relu,block,num_blocks,classes)
+    def __init__(
+        self,
+        Relu,
+        num_blocks,
+        pretrained_path,
+        block=BasicBlock,
+        classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        trial=None,
+    ):
+        self.model = QResNet(Relu, block, num_blocks, classes)
 
-
-
-        pretrained_dict = torch.load(pretrained_path, map_location='cuda' if torch.cuda.is_available() else 'cpu')
-        
-        # Filter out mismatched layers
-        model_dict = self.model.state_dict()
-        
-        # Only keep pretrained layers that match in shape
-        pretrained_dict_filtered = {
-            k: v for k, v in pretrained_dict.items() 
-            if k in model_dict and v.shape == model_dict[k].shape
-        }
-        
-        # Update model state dict
-        model_dict.update(pretrained_dict_filtered)
-        self.model.load_state_dict(model_dict, strict=False)  # strict=False allows missing/unexpected keys
-        
-        # Freeze layers as before
-        for name, param in self.model.named_parameters():
-            if ('conv1r' in name or 'conv2r' in name):
-                param.requires_grad = False
-
-
-
-    def train(self, X, y, batch_size, lr, epochs):
-        loader = DataLoader(
-            TensorDataset(X, y),
-            batch_size=batch_size,
-            shuffle=True
+        pretrained_dict = torch.load(
+            pretrained_path, map_location="cuda" if torch.cuda.is_available() else "cpu"
         )
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model.to(device)
+        # Filter out mismatched layers
+        model_dict = self.model.state_dict()
+
+        # Only keep pretrained layers that match in shape
+        pretrained_dict_filtered = {
+            k: v
+            for k, v in pretrained_dict.items()
+            if k in model_dict and v.shape == model_dict[k].shape
+        }
+
+        # Update model state dict
+        model_dict.update(pretrained_dict_filtered)
+        self.model.load_state_dict(
+            model_dict, strict=False
+        )  # strict=False allows missing/unexpected keys
+
+        # Freeze layers as before
+        for name, param in self.model.named_parameters():
+            if "conv1r" in name or "conv2r" in name:
+                param.requires_grad = False
+
+        self.trial = trial
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(self.device)
+
+        if self.trial is not None:
+            self.optimizer_name = self.trial.suggest_categorical(
+                "optimizer", ["Adam", "AdamW", "SGD"]
+            )
+            self.lr = self.trial.suggest_float("lr", 1e-6, 1e-2, log=True)
+            if self.optimizer_name == "AdamW":
+                self.weight_decay = self.trial.suggest_float(
+                    "weight_decay", 1e-5, 1e-1, log=True
+                )
+                self.optimizer = torch.optim.AdamW(
+                    filter(lambda p: p.requires_grad, self.model.parameters()),
+                    lr=self.lr,
+                    weight_decay=self.weight_decay,
+                )
+            elif self.optimizer_name == "SGD":
+                self.momentum = self.trial.suggest_float("momentum", 0.5, 0.99)
+                self.optimizer = torch.optim.SGD(
+                    filter(lambda p: p.requires_grad, self.model.parameters()),
+                    lr=self.lr,
+                    momentum=self.momentum,
+                )
+            else:
+                self.optimizer = torch.optim.Adam(
+                    filter(lambda p: p.requires_grad, self.model.parameters()),
+                    lr=self.lr,
+                )
+        else:
+            self.optimizer_name = "Adam"
+            self.lr = 1e-3
+            self.optimizer = None
+
+    def train(self, X, y, batch_size, lr, epochs):
+        loader = DataLoader(TensorDataset(X, y), batch_size=batch_size, shuffle=True)
+
+        self.model.to(self.device)
 
         # Only optimize parameters that require gradients
-        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr)
+        if self.optimizer is None:
+            self.optimizer = torch.optim.Adam(
+                filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr
+            )
+
         criterion = nn.CrossEntropyLoss()
 
         # Verify what's being trained
-        trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
+        trainable_params = sum(
+            p.numel() for p in self.model.parameters() if p.requires_grad
+        )
         total_params = sum(p.numel() for p in self.model.parameters())
-        print(f"Trainable: {trainable_params:,} / {total_params:,} params ({100*trainable_params/total_params:.1f}%)")
+        print(
+            f"Trainable: {trainable_params:,} / {total_params:,} params ({100*trainable_params/total_params:.1f}%)"
+        )
 
         for epoch in range(epochs):
             self.model.train()
             total, correct, loss_sum = 0, 0, 0
 
             for images, labels in loader:
-                images, labels = images.to(device), labels.to(device)
+                images, labels = images.to(self.device), labels.to(self.device)
 
-                optimizer.zero_grad()
+                self.optimizer.zero_grad()
                 outputs = self.model(images)
                 loss = criterion(outputs, labels)
                 loss.backward()
-                optimizer.step()
+                self.optimizer.step()
 
                 loss_sum += loss.item() * labels.size(0)
                 preds = outputs.argmax(1)
                 correct += (preds == labels).sum().item()
                 total += labels.size(0)
 
-            print(f"Epoch {epoch+1}/{epochs} | "
-                f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}")
+            print(
+                f"Epoch {epoch+1}/{epochs} | "
+                f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}"
+            )
 
-
-    def test(self,X, y, classes):
+    def test(self, X, y, classes):
         self.model.eval()  # disable dropout/batchnorm training behavior
         correct = 0
         total = 0
@@ -206,8 +256,6 @@ class Quad_adapters():
 
         accuracy = 100 * correct / total
         return accuracy
-
-
 
     def save(self, path):
         torch.save(self.model.state_dict(), f"{path}")

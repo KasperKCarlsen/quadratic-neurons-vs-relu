@@ -25,7 +25,7 @@ class LambdaLayer(nn.Module):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, config, stride=1, option='A'):
+    def __init__(self, in_planes, planes, config, stride=1, option="A"):
         super().__init__()
         self.config = config
 
@@ -42,8 +42,9 @@ class BasicBlock(nn.Module):
         self.shortcut = nn.Sequential()
         if stride != 1 or in_planes != planes:
             self.shortcut = LambdaLayer(
-                lambda x: F.pad(x[:, :, ::2, ::2],
-                                (0, 0, 0, 0, planes//4, planes//4))
+                lambda x: F.pad(
+                    x[:, :, ::2, ::2], (0, 0, 0, 0, planes // 4, planes // 4)
+                )
             )
 
     def forward(self, x):
@@ -73,7 +74,7 @@ class QResNet(nn.Module):
         self.linear = nn.Linear(64, len(self.classes))
 
     def _make_layer(self, block, planes, num_blocks, stride=1):
-        strides = [stride] + [1]*(num_blocks-1)
+        strides = [stride] + [1] * (num_blocks - 1)
         layers = []
 
         for s in strides:
@@ -93,24 +94,55 @@ class QResNet(nn.Module):
         out = out.view(out.size(0), -1)
 
         return self.linear(out)
-    
 
-class Baseline():
 
-    def __init__(self, Relu, num_blocks, block = BasicBlock, classes = [0,1,2,3,4,5,6,7,8,9]):
-        self.model = QResNet(Relu,block,num_blocks,classes)
+class Baseline:
 
+    def __init__(
+        self,
+        Relu,
+        num_blocks,
+        block=BasicBlock,
+        classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        trial=None,
+    ):
+        self.model = QResNet(Relu, block, num_blocks, classes)
+        self.trial = trial
+
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(self.device)
+
+        if self.trial is not None:
+            self.optimizer_name = self.trial.suggest_categorical(
+                "optimizer", ["Adam", "AdamW", "SGD"]
+            )
+            self.lr = self.trial.suggest_float("lr", 1e-6, 1e-2, log=True)
+            if self.optimizer_name == "AdamW":
+                self.weight_decay = self.trial.suggest_float(
+                    "weight_decay", 1e-5, 1e-1, log=True
+                )
+                self.optimizer = torch.optim.AdamW(
+                    self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay
+                )
+            elif self.optimizer_name == "SGD":
+                self.momentum = self.trial.suggest_float("momentum", 0.5, 0.99)
+                self.optimizer = torch.optim.SGD(
+                    self.model.parameters(), lr=self.lr, momentum=self.momentum
+                )
+            else:
+                self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+        else:
+            self.optimizer_name = "Adam"
+            self.lr = 1e-3
+            self.optimizer = None
 
     def train(self, X, y, batch_size, lr, epochs):
-        loader = DataLoader(
-            TensorDataset(X, y),
-            batch_size=batch_size,
-            shuffle=True
-        )
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model.to(device)
+        loader = DataLoader(TensorDataset(X, y), batch_size=batch_size, shuffle=True)
+        self.model.to(self.device)
 
-        optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        if self.optimizer is None:
+            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+
         criterion = nn.CrossEntropyLoss()
 
         for epoch in range(epochs):
@@ -118,27 +150,27 @@ class Baseline():
             total, correct, loss_sum = 0, 0, 0
 
             for images, labels in loader:
-                images, labels = images.to(device), labels.to(device)
+                images, labels = images.to(self.device), labels.to(self.device)
 
-                optimizer.zero_grad()
+                self.optimizer.zero_grad()
                 outputs = self.model(images)
                 loss = criterion(outputs, labels)
                 loss.backward()
-                optimizer.step()
+                self.optimizer.step()
 
                 loss_sum += loss.item() * labels.size(0)
                 preds = outputs.argmax(1)
                 correct += (preds == labels).sum().item()
                 total += labels.size(0)
 
-            print(f"Epoch {epoch+1}/{epochs} | "
-                f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}")
+            print(
+                f"Epoch {epoch+1}/{epochs} | "
+                f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}"
+            )
 
         return None
 
-
-
-    def test(self,X,y):
+    def test(self, X, y):
         self.model.eval()  # disable dropout/batchnorm training behavior
         correct = 0
         total = 0
@@ -164,5 +196,3 @@ class Baseline():
 
     def load(self, path):
         self.model.load_state_dict(torch.load(path))
-
-
