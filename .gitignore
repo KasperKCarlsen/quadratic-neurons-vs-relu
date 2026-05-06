@@ -3,3 +3,4 @@ docs
 venv/
 models/
 .optuna/
+optuna_databases/

@@ -16,8 +16,8 @@ cd ~/Fagprojekt
 echo "Job started at $(date)"
 echo "Running on node: $(hostname)"
 
-source .venv/bin/activate
+source .optuna/bin/activate
 
-python -m Train_Model_config
+python Train_Model.py --model Quad_neuron --ReLU 2 --epoch 100 --num_blocks 3 3 3
 
 echo "Job finished at $(date)"
