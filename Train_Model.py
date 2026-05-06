@@ -56,7 +56,7 @@ parser.add_argument(
     "--val",
     dest="val",
     type=bool,
-    default=False,
+    default=True,
     help="Whether to use a validation split from the training data instead of the official test set",
 )
 
@@ -88,9 +88,7 @@ parser.add_argument(
 )
 
 
-def objective(trial):
-    args = parser.parse_args()
-
+def objective(trial, args, X_train, y_train, X_test, y_test):
     model_class = MODEL_MAP[args.model]
     if model_class is not Quad_adapters:
         model = model_class(
@@ -108,10 +106,42 @@ def objective(trial):
     if model_class is not Quad_adapters and args.load_path is not None:
         model.load(args.load_path)
 
+    best_acc = 0
+    accs = {}
+    save_dir = f"models/{args.model}_ReLU{args.ReLU}"
+    print(save_dir)
+    os.makedirs(save_dir, exist_ok=True)
+
+    batch_size = trial.suggest_int("batch_size", 32, 512)
+
+    for i in range(args.epoch):
+        model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
+
+        acc = model.test(X_test, y_test)
+        accs[i * args.save_epoch] = acc
+
+        if acc > best_acc:
+            best_acc = acc
+            model.save(f"{save_dir}/epoch{i*args.save_epoch}")
+
+        trial.report(acc, i)
+
+    with open(f"{save_dir}/accuracies.pkl", "wb") as f:
+        pickle.dump(accs, f)
+
+    with open(f"{save_dir}/arguments.pkl", "wb") as f:
+        pickle.dump(args, f)
+
+    return acc
+
+
+if __name__ == "__main__":
+    args = parser.parse_args()
+
     X = []
     y = []
 
-    if args.val:
+    if True:
         for i in range(1, 6):
             images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
             X.append(images)
@@ -157,38 +187,6 @@ def objective(trial):
         X_test = torch.from_numpy(images_test).float() / 255.0  # Normalize to [0, 1]
         y_test = torch.from_numpy(labels_test).long()
 
-    best_acc = 0
-    accs = {}
-    save_dir = f"models/{args.model}_ReLU{args.ReLU}"
-    print(save_dir)
-    os.makedirs(save_dir, exist_ok=True)
-
-    batch_size = trial.suggest_int("batch_size", 32, 512)
-
-    for i in range(args.epoch):
-        model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
-
-        acc = model.test(X_test, y_test)
-        accs[i * args.save_epoch] = acc
-
-        if acc > best_acc:
-            best_acc = acc
-            model.save(f"{save_dir}/epoch{i*args.save_epoch}")
-
-        trial.report(acc, i)
-
-    with open(f"{save_dir}/accuracies.pkl", "wb") as f:
-        pickle.dump(accs, f)
-
-    with open(f"{save_dir}/arguments.pkl", "wb") as f:
-        pickle.dump(args, f)
-
-    return acc
-
-
-if __name__ == "__main__":
-    args = parser.parse_args()
-
     # Create a directory for Optuna databases
     os.makedirs("optuna_databases", exist_ok=True)
 
@@ -199,7 +197,10 @@ if __name__ == "__main__":
         direction="maximize",
     )
 
-    study.optimize(objective, n_trials=100, timeout=600)
+    study.optimize(
+        lambda trial: objective(trial, args, X_train, y_train, X_test, y_test),
+        n_trials=100,
+    )
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
     complete_trials = study.get_trials(deepcopy=False, states=[TrialState.COMPLETE])
