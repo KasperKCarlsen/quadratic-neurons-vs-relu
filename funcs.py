@@ -60,7 +60,9 @@ def load_checkpoint(path):
     100+ times per run). Caching by path turns that into a single read.
     """
     map_location = "cuda" if torch.cuda.is_available() else "cpu"
-    return torch.load(path, map_location=map_location)
+    # weights_only=True is safe (checkpoints are plain state_dicts) and silences
+    # the PyTorch>=2.4 pickle-security warning / future default flip.
+    return torch.load(path, map_location=map_location, weights_only=True)
 
 
 def freeze_original_weights(model):

@@ -88,41 +88,102 @@ parser.add_argument(
     help="Fraction of the loaded data to reserve for testing",
 )
 
+parser.add_argument(
+    "--compile",
+    choices=["none", "default", "reduce-overhead", "max-autotune"],
+    default="none",
+    help="torch.compile mode applied per trial. 'none' is safest for short HPO "
+    "trials; 'reduce-overhead' (CUDA graphs) is usually the best fit for this "
+    "small model on an A100. VALIDATE the chosen mode locally before a long run.",
+)
+
+parser.add_argument(
+    "--storage",
+    choices=["sqlite", "journal"],
+    default="sqlite",
+    help="Optuna storage backend. Use 'journal' for an LSF job array (multiple "
+    "workers sharing one study) on a networked/NFS filesystem, where SQLite file "
+    "locking is unreliable.",
+)
+
+
+def build_storage(backend, name_base):
+    """Build the Optuna storage.
+
+    SQLite is fine for a single process. For an LSF job array (many workers
+    sharing one study over a networked/NFS filesystem) use 'journal': SQLite
+    file locking is unreliable on NFS and tends to throw 'database is locked'
+    under concurrent writers, whereas JournalStorage is designed for it.
+    """
+    os.makedirs("optuna_databases", exist_ok=True)
+    if backend == "journal":
+        try:  # optuna >= 4.x
+            from optuna.storages import JournalStorage
+            from optuna.storages.journal import JournalFileBackend
+            return JournalStorage(JournalFileBackend(f"optuna_databases/{name_base}.log"))
+        except ImportError:  # optuna 3.x
+            from optuna.storages import JournalStorage, JournalFileStorage
+            return JournalStorage(JournalFileStorage(f"optuna_databases/{name_base}.log"))
+    from optuna.storages import RDBStorage
+    # Bump the SQLite busy timeout so a brief lock doesn't fail the trial.
+    return RDBStorage(
+        url=f"sqlite:///optuna_databases/{name_base}_study.db",
+        engine_kwargs={"connect_args": {"timeout": 100}},
+    )
+
 
 def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     model_class = MODEL_MAP[args.model]
     if model_class in (Quad_neuron, Baseline):
-        model = model_class(args.ReLU, args.num_blocks, classes=args.classes, trial=trial)
+        model = model_class(args.ReLU, args.num_blocks, classes=args.classes, trial=trial, compile_mode=args.compile)
     else:
-        model = model_class(args.ReLU, args.num_blocks, args.load_path, classes=args.classes, trial=trial)
+        model = model_class(args.ReLU, args.num_blocks, args.load_path, classes=args.classes, trial=trial, compile_mode=args.compile)
 
     if model_class not in (LoRA, Quad_adapters) and args.load_path is not None:
         model.load(args.load_path)
+
+    # Per-trial output directory. Previously every trial wrote checkpoints and
+    # accuracies.pkl into the same save_dir, so trials (sequential OR parallel
+    # array workers) clobbered each other and the "best" file left on disk had
+    # nothing to do with study.best_trial. Scoping by trial.number keeps each
+    # trial's artifacts and makes them recoverable from the study DB.
+    trial_dir = f"{save_dir}/trial{trial.number}"
+    os.makedirs(trial_dir, exist_ok=True)
 
     best_acc = 0
     accs = {}
 
     batch_size = trial.suggest_int("batch_size", 32, 512)
 
-    for i in range(args.epoch):
-        model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
+    try:
+        for i in range(args.epoch):
+            model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
 
-        acc = model.test(X_test, y_test)
-        accs[i * args.save_epoch] = acc
+            acc = model.test(X_test, y_test)
+            accs[i * args.save_epoch] = acc
 
-        if acc > best_acc:
-            best_acc = acc
-            model.save(f"{save_dir}/epoch{i*args.save_epoch}")
+            if acc > best_acc:
+                best_acc = acc
+                model.save(f"{trial_dir}/epoch{i*args.save_epoch}")
 
-        trial.report(acc, i)
+            trial.report(acc, i)
 
-        if trial.should_prune():
-            raise optuna.TrialPruned()
+            if trial.should_prune():
+                raise optuna.TrialPruned()
 
-    with open(f"{save_dir}/accuracies.pkl", "wb") as f:
-        pickle.dump(accs, f)
+        with open(f"{trial_dir}/accuracies.pkl", "wb") as f:
+            pickle.dump(accs, f)
+    finally:
+        # Free compiled artifacts / CUDA-graph memory pools between trials so a
+        # long study (100+ compiles) doesn't accumulate them. No-op when not
+        # compiling, and guarded for older torch without compiler.reset.
+        if args.compile != "none" and hasattr(torch, "compiler") and hasattr(torch.compiler, "reset"):
+            torch.compiler.reset()
 
-    return acc
+    # Return the best epoch (matches the checkpoint we keep) rather than the
+    # last epoch. Revert to `return acc` if you want last-epoch semantics.
+    trial.set_user_attr("best_acc", best_acc)
+    return best_acc
 
 
 if __name__ == "__main__":
@@ -222,9 +283,16 @@ if __name__ == "__main__":
     with open(f"{save_dir}/arguments.pkl", "wb") as f:
         pickle.dump(args, f)
 
+    # Build storage from --storage. 'journal' is the one to use when an LSF
+    # job array runs many workers against this same study on a networked
+    # filesystem; 'sqlite' is fine for a single process. load_if_exists lets
+    # every array task attach to the one study instead of clobbering it.
+    storage = build_storage(
+        args.storage, f"{args.model}_with_ReLU{args.ReLU}_arc_{args.num_blocks}"
+    )
     study = optuna.create_study(
         study_name=f"{args.model}_with_ReLU{args.ReLU}_optimization",
-        storage=f"sqlite:///optuna_databases/{args.model}_with_ReLU{args.ReLU}_arc_{args.num_blocks}_study.db",
+        storage=storage,
         load_if_exists=True,
         direction="maximize",
     )

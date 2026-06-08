@@ -122,7 +122,7 @@ class QResNet(nn.Module):
 
 class Quad_neuron():
 
-    def __init__(self, Relu, num_blocks, block = BasicBlock, classes = [0,1,2,3,4,5,6,7,8,9], trial = None):
+    def __init__(self, Relu, num_blocks, block = BasicBlock, classes = [0,1,2,3,4,5,6,7,8,9], trial = None, compile_mode = "none"):
         self.model = QResNet(Relu,block,num_blocks,classes)
         self.trial = trial
 
@@ -132,6 +132,10 @@ class Quad_neuron():
         self.memory_format = torch.channels_last if self.device.type == "cuda" else torch.contiguous_format
         self.use_amp = self.device.type == "cuda"
         self.model.to(self.device, memory_format=self.memory_format)
+        # Optional torch.compile. Keep self.model as the *uncompiled* module so
+        # state_dict()/save()/load() stay prefix-free; route forward through
+        # self.fwd. See Train_Model.py --compile for modes/caveats.
+        self.fwd = self.model if compile_mode == "none" else torch.compile(self.model, mode=compile_mode)
         self.criterion = nn.CrossEntropyLoss()
 
         # Setup optimizer parameters once per trial if trial is provided
@@ -140,12 +144,12 @@ class Quad_neuron():
             self.lr = self.trial.suggest_float("lr", 1e-6, 1e-2, log=True)
             if self.optimizer_name == "AdamW":
                 self.weight_decay = self.trial.suggest_float("weight_decay", 1e-5, 1e-1, log=True)
-                self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+                self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay, fused=self.use_amp)
             elif self.optimizer_name == "SGD":
                 self.momentum = self.trial.suggest_float("momentum", 0.5, 0.99)
                 self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum)
             else:
-                self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr)
+                self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr, fused=self.use_amp)
         else:
             self.optimizer_name = "Adam"
             self.lr = 1e-3
@@ -174,7 +178,7 @@ class Quad_neuron():
 
                 self.optimizer.zero_grad(set_to_none=True)
                 with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
-                    outputs = self.model(images)
+                    outputs = self.fwd(images)
                     loss = self.criterion(outputs, labels)
                 loss.backward()
                 self.optimizer.step()
@@ -196,7 +200,7 @@ class Quad_neuron():
         correct = torch.zeros((), device=self.device)
         total = torch.zeros((), device=self.device)
 
-        with torch.no_grad(), torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
+        with torch.inference_mode(), torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
             # No backward pass during eval, so memory pressure is far lower
             # than training - use a bigger batch (matches the upper end of
             # the trial's batch_size search space, which already has to fit
@@ -204,7 +208,7 @@ class Quad_neuron():
             for inputs, labels in iterate_batches(X, y, batch_size=512, shuffle=False, drop_last=False):
                 inputs = inputs.to(memory_format=self.memory_format)
 
-                outputs = self.model(inputs)
+                outputs = self.fwd(inputs)
                 predicted = outputs.argmax(1)
                 total += labels.size(0)
                 correct += (predicted == labels).sum()

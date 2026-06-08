@@ -227,6 +227,7 @@ class LoRA:
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         trial=None,
         rank=4,
+        compile_mode="none",
     ):
         self.model = QResNetLoRA(Relu, block, num_blocks, classes, rank=rank)
 
@@ -261,6 +262,10 @@ class LoRA:
         self.memory_format = torch.channels_last if self.device.type == "cuda" else torch.contiguous_format
         self.use_amp = self.device.type == "cuda"
         self.model.to(self.device, memory_format=self.memory_format)
+        # Optional torch.compile. Keep self.model as the *uncompiled* module so
+        # state_dict()/save()/load() stay prefix-free; route forward through
+        # self.fwd. See Train_Model.py --compile for modes/caveats.
+        self.fwd = self.model if compile_mode == "none" else torch.compile(self.model, mode=compile_mode)
         self.criterion = nn.CrossEntropyLoss()
 
         if self.trial is not None:
@@ -276,6 +281,7 @@ class LoRA:
                     filter(lambda p: p.requires_grad, self.model.parameters()),
                     lr=self.lr,
                     weight_decay=self.weight_decay,
+                    fused=self.use_amp,
                 )
             elif self.optimizer_name == "SGD":
                 self.momentum = self.trial.suggest_float("momentum", 0.5, 0.99)
@@ -288,6 +294,7 @@ class LoRA:
                 self.optimizer = torch.optim.Adam(
                     filter(lambda p: p.requires_grad, self.model.parameters()),
                     lr=self.lr,
+                    fused=self.use_amp,
                 )
         else:
             self.optimizer_name = "Adam"
@@ -329,7 +336,7 @@ class LoRA:
 
                 self.optimizer.zero_grad(set_to_none=True)
                 with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
-                    outputs = self.model(images)
+                    outputs = self.fwd(images)
                     loss = self.criterion(outputs, labels)
                 loss.backward()
                 self.optimizer.step()
@@ -349,7 +356,7 @@ class LoRA:
         correct = torch.zeros((), device=self.device)
         total = torch.zeros((), device=self.device)
 
-        with torch.no_grad(), torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
+        with torch.inference_mode(), torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
             # No backward pass during eval, so memory pressure is far lower
             # than training - use a bigger batch (matches the upper end of
             # the trial's batch_size search space, which already has to fit
@@ -357,7 +364,7 @@ class LoRA:
             for inputs, labels in iterate_batches(X, y, batch_size=512, shuffle=False, drop_last=False):
                 inputs = inputs.to(memory_format=self.memory_format)
 
-                outputs = self.model(inputs)
+                outputs = self.fwd(inputs)
                 predicted = outputs.argmax(1)
                 total += labels.size(0)
                 correct += (predicted == labels).sum()
@@ -368,4 +375,5 @@ class LoRA:
         torch.save(self.model.state_dict(), f"{path}")
 
     def load(self, path):
-        self.model.load_state_dict(torch.load(path))
+        map_location = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model.load_state_dict(torch.load(path, map_location=map_location, weights_only=True))
