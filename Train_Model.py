@@ -1,13 +1,6 @@
 import torch
 import os
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.nn.init as init
-from torch.autograd import Variable
-import pandas as pd
-from torch.utils.data import TensorDataset, DataLoader
-import torchvision
-import torchvision.transforms as transforms
+from torch.utils.data import TensorDataset
 import pickle
 import numpy as np
 import argparse
@@ -19,6 +12,12 @@ from py_files.Quad_Neuron import Quad_neuron
 from py_files.Quad_adapters import Quad_adapters
 from py_files.Baseline import Baseline
 from py_files.Baseline_with_LoRA import LoRA
+
+# Speed up convolutions for the fixed CIFAR-10 input size and let matmuls use
+# TF32 on Ampere+ GPUs (e.g. the A100 nodes the .lsf jobs run on) - both are
+# free wins that don't change the trained model architecture.
+torch.backends.cudnn.benchmark = True
+torch.set_float32_matmul_precision("high")
 
 MODEL_MAP = {
     "Quad_neuron": Quad_neuron,
@@ -90,7 +89,7 @@ parser.add_argument(
 )
 
 
-def objective(trial, args, X_train, y_train, X_test, y_test):
+def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     model_class = MODEL_MAP[args.model]
     if model_class in (Quad_neuron, Baseline):
         model = model_class(args.ReLU, args.num_blocks, classes=args.classes, trial=trial)
@@ -102,9 +101,6 @@ def objective(trial, args, X_train, y_train, X_test, y_test):
 
     best_acc = 0
     accs = {}
-    save_dir = f"models/{args.model}_ReLU{args.ReLU}_arc_{args.num_blocks}"
-    print(save_dir)
-    os.makedirs(save_dir, exist_ok=True)
 
     batch_size = trial.suggest_int("batch_size", 32, 512)
 
@@ -120,11 +116,11 @@ def objective(trial, args, X_train, y_train, X_test, y_test):
 
         trial.report(acc, i)
 
+        if trial.should_prune():
+            raise optuna.TrialPruned()
+
     with open(f"{save_dir}/accuracies.pkl", "wb") as f:
         pickle.dump(accs, f)
-
-    with open(f"{save_dir}/arguments.pkl", "wb") as f:
-        pickle.dump(args, f)
 
     return acc
 
@@ -146,10 +142,15 @@ if __name__ == "__main__":
         X = np.concatenate(X)
         y = np.concatenate(y)
 
-        # Filter dataset to selected classes and remap labels to 0..C-1
+        # Filter dataset to selected classes and remap labels to 0..C-1.
+        # A small lookup-table index replaces a 50k-iteration Python loop
+        # over a dict - both produce the same remapped array, but this one
+        # runs as a single vectorized numpy op.
         X, y = get_classes_dataset(args.classes, X, y)
-        label_map = {orig: new for new, orig in enumerate(args.classes)}
-        y = np.array([label_map[int(lbl)] for lbl in y])
+        label_lookup = np.empty(10, dtype=np.int64)
+        for new, orig in enumerate(args.classes):
+            label_lookup[orig] = new
+        y = label_lookup[y]
 
         X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
         y = torch.from_numpy(y).long()
@@ -164,11 +165,11 @@ if __name__ == "__main__":
             generator=torch.Generator().manual_seed(42)
         )
 
-        X_train = torch.stack([train_dataset[i][0] for i in range(len(train_dataset))])
-        y_train = torch.tensor([train_dataset[i][1] for i in range(len(train_dataset))])
+        X_train = X[train_dataset.indices]
+        y_train = y[train_dataset.indices]
 
-        X_test = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))])
-        y_test = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))])
+        X_test = X[test_dataset.indices]
+        y_test = y[test_dataset.indices]
     
     else:
         for i in range(1, 6):
@@ -179,10 +180,15 @@ if __name__ == "__main__":
         X = np.concatenate(X)
         y = np.concatenate(y)
 
-        # Filter dataset to selected classes and remap labels to 0..C-1
+        # Filter dataset to selected classes and remap labels to 0..C-1.
+        # A small lookup-table index replaces a 50k-iteration Python loop
+        # over a dict - both produce the same remapped array, but this one
+        # runs as a single vectorized numpy op.
         X, y = get_classes_dataset(args.classes, X, y)
-        label_map = {orig: new for new, orig in enumerate(args.classes)}
-        y = np.array([label_map[int(lbl)] for lbl in y])
+        label_lookup = np.empty(10, dtype=np.int64)
+        for new, orig in enumerate(args.classes):
+            label_lookup[orig] = new
+        y = label_lookup[y]
 
         X_train = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
         y_train = torch.from_numpy(y).long()
@@ -192,8 +198,29 @@ if __name__ == "__main__":
         X_test = torch.from_numpy(images_test).float() / 255.0  # Normalize to [0, 1]
         y_test = torch.from_numpy(labels_test).long()
 
+    # CIFAR-10-scale tensors (well under 1 GB total) fit easily in a 4070
+    # Ti's 12 GB of VRAM. Move them to the training device once, up front,
+    # instead of copying a fresh batch from host memory on every iteration
+    # of every epoch of every Optuna trial - the model wrappers' train/test
+    # loops index batches directly out of these resident tensors.
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    X_train = X_train.to(device)
+    y_train = y_train.to(device)
+    X_test = X_test.to(device)
+    y_test = y_test.to(device)
+
     # Create a directory for Optuna databases
     os.makedirs("optuna_databases", exist_ok=True)
+
+    # save_dir and the pickled args only depend on the (fixed) CLI arguments,
+    # not on anything Optuna suggests per trial - compute and write them once
+    # instead of redoing it on every single trial.
+    save_dir = f"models/{args.model}_ReLU{args.ReLU}_arc_{args.num_blocks}"
+    print(save_dir)
+    os.makedirs(save_dir, exist_ok=True)
+
+    with open(f"{save_dir}/arguments.pkl", "wb") as f:
+        pickle.dump(args, f)
 
     study = optuna.create_study(
         study_name=f"{args.model}_with_ReLU{args.ReLU}_optimization",
@@ -203,7 +230,7 @@ if __name__ == "__main__":
     )
 
     study.optimize(
-        lambda trial: objective(trial, args, X_train, y_train, X_test, y_test),
+        lambda trial: objective(trial, args, save_dir, X_train, y_train, X_test, y_test),
         n_trials=args.n_trials,
     )
 

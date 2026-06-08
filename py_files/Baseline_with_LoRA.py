@@ -4,13 +4,14 @@ import torch.nn.functional as F
 import torch.nn.init as init
 from torch.autograd import Variable
 import pandas as pd
-from torch.utils.data import TensorDataset, DataLoader
 import torchvision
 import torchvision.transforms as transforms
 import pickle
 import numpy as np
 import loralib as lora
 import math
+
+from funcs import load_checkpoint, iterate_batches
 
 
 class LambdaLayer(nn.Module):
@@ -229,9 +230,9 @@ class LoRA:
     ):
         self.model = QResNetLoRA(Relu, block, num_blocks, classes, rank=rank)
 
-        pretrained_dict = torch.load(
-            pretrained_path, map_location="cuda" if torch.cuda.is_available() else "cpu"
-        )
+        # Cached: this constructor runs once per Optuna trial, and re-reading
+        # the same checkpoint from disk every trial is pure overhead.
+        pretrained_dict = load_checkpoint(pretrained_path)
 
         # The Baseline checkpoint stores each conv as e.g. "conv1r.weight",
         # but here it's wrapped in a LoRAConv2d as "conv1r.conv.weight".
@@ -255,7 +256,12 @@ class LoRA:
 
         self.trial = trial
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model.to(self.device)
+        # channels_last + bf16 autocast is the standard fast recipe for conv
+        # nets on Tensor Core GPUs (A100); keep plain fp32/contiguous on CPU.
+        self.memory_format = torch.channels_last if self.device.type == "cuda" else torch.contiguous_format
+        self.use_amp = self.device.type == "cuda"
+        self.model.to(self.device, memory_format=self.memory_format)
+        self.criterion = nn.CrossEntropyLoss()
 
         if self.trial is not None:
             self.optimizer_name = self.trial.suggest_categorical(
@@ -289,8 +295,10 @@ class LoRA:
             self.optimizer = None
 
     def train(self, X, y, batch_size, lr, epochs):
-        loader = DataLoader(TensorDataset(X, y), batch_size=batch_size, shuffle=True)
-        self.model.to(self.device)
+        # X/y already live on self.device (loaded resident once in
+        # Train_Model.py) - iterate_batches indexes batches straight out of
+        # them, skipping DataLoader/TensorDataset collation, pinning and the
+        # per-batch host->device copy entirely.
 
         # Count trainable parameters
         trainable_params = sum(
@@ -306,51 +314,55 @@ class LoRA:
                 filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr
             )
 
-        criterion = nn.CrossEntropyLoss()
-
         for epoch in range(epochs):
             self.model.train()
-            total, correct, loss_sum = 0, 0, 0
+            # Accumulate on-device and only sync to the CPU once per epoch -
+            # calling .item() inside the loop forces a CUDA sync every batch.
+            total = torch.zeros((), device=self.device)
+            correct = torch.zeros((), device=self.device)
+            loss_sum = torch.zeros((), device=self.device)
 
-            for images, labels in loader:
-                images, labels = images.to(self.device), labels.to(self.device)
+            # Keep batch shape constant on GPU so cudnn.benchmark doesn't have
+            # to re-tune kernels for a one-off, smaller final batch each epoch.
+            for images, labels in iterate_batches(X, y, batch_size, shuffle=True, drop_last=self.use_amp):
+                images = images.to(memory_format=self.memory_format)
 
-                self.optimizer.zero_grad()
-                outputs = self.model(images)
-                loss = criterion(outputs, labels)
+                self.optimizer.zero_grad(set_to_none=True)
+                with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
+                    outputs = self.model(images)
+                    loss = self.criterion(outputs, labels)
                 loss.backward()
                 self.optimizer.step()
 
-                loss_sum += loss.item() * labels.size(0)
-                preds = outputs.argmax(1)
-                correct += (preds == labels).sum().item()
+                loss_sum += loss.detach() * labels.size(0)
+                correct += (outputs.detach().argmax(1) == labels).sum()
                 total += labels.size(0)
 
             print(
                 f"Epoch {epoch+1}/{epochs} | "
-                f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}"
+                f"Loss: {(loss_sum / total).item():.4f} | Acc: {(correct / total).item():.4f}"
             )
 
     def test(self, X, y):
         self.model.eval()  # disable dropout/batchnorm training behavior
-        correct = 0
-        total = 0
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = self.model.to(device)
+        correct = torch.zeros((), device=self.device)
+        total = torch.zeros((), device=self.device)
 
-        train_loader = DataLoader(TensorDataset(X, y), batch_size=128, shuffle=True)
+        with torch.no_grad(), torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
+            # No backward pass during eval, so memory pressure is far lower
+            # than training - use a bigger batch (matches the upper end of
+            # the trial's batch_size search space, which already has to fit
+            # during training) to cut down on kernel-launch overhead.
+            for inputs, labels in iterate_batches(X, y, batch_size=512, shuffle=False, drop_last=False):
+                inputs = inputs.to(memory_format=self.memory_format)
 
-        with torch.no_grad():  # disable gradient computation
-            for inputs, labels in train_loader:
-                inputs, labels = inputs.to(device), labels.to(device)
                 outputs = self.model(inputs)
-                _, predicted = torch.max(outputs, 1)  # get class with highest score
+                predicted = outputs.argmax(1)
                 total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+                correct += (predicted == labels).sum()
 
-        accuracy = 100 * correct / total
-        return accuracy
+        return (100 * correct / total).item()
 
     def save(self, path):
         torch.save(self.model.state_dict(), f"{path}")
