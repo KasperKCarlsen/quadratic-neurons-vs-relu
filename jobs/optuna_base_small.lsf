@@ -1,6 +1,6 @@
 #!/bin/bash
 #BSUB -J Train_Model_config.py
-#BSUB -q hpc
+#BSUB -q gpua10
 #BSUB -o /logs/Train_model_config_%J.out
 #BSUB -e /logs/Train_model_config_%J.err
 #BSUB -B
