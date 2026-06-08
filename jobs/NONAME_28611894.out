@@ -1,0 +1,38 @@
+/bin/bash: line 1: ./optuna_big_base.lsf: Permission denied
+
+------------------------------------------------------------
+Sender: LSF System <lsfadmin@hpc.dtu.dk>
+Subject: Job 28611894: <NONAME> in cluster <dcc> Exited
+
+Job <NONAME> was submitted from host <n-62-30-2> by user <s245146> in cluster <dcc> at Mon Jun  8 12:21:26 2026
+Job was executed on host(s) <n-62-31-24>, in queue <hpc>, as user <s245146> in cluster <dcc> at Mon Jun  8 12:21:27 2026
+</zhome/99/4/216796> was used as the home directory.
+</zhome/99/4/216796/Fagprojekt/jobs> was used as the working directory.
+Started at Mon Jun  8 12:21:27 2026
+Terminated at Mon Jun  8 12:21:27 2026
+Results reported at Mon Jun  8 12:21:27 2026
+
+Your job looked like:
+
+------------------------------------------------------------
+# LSBATCH: User input
+optuna_big_base.lsf
+------------------------------------------------------------
+
+Exited with exit code 126.
+
+Resource usage summary:
+
+    CPU time :                                   0.51 sec.
+    Max Memory :                                 -
+    Average Memory :                             -
+    Total Requested Memory :                     1024.00 MB
+    Delta Memory :                               -
+    Max Swap :                                   -
+    Max Processes :                              -
+    Max Threads :                                -
+    Run time :                                   0 sec.
+    Turnaround time :                            1 sec.
+
+The output (if any) is above this job summary.
+
