@@ -5,9 +5,13 @@ import sys
 os.makedirs("Run_number", exist_ok=True)
 
 commands = [
-    ["python", "Train_Model.py", "--model", "Quad_neuron", "--ReLU", "2", "--epoch", "25", "--num_blocks", "5", "5", "5","--n_trials","10"],
-    ["python", "Train_Model.py", "--model", "Quad_neuron", "--ReLU", "1", "--epoch", "25", "--num_blocks", "5", "5", "5","--n_trials","10"],
-    ["python", "Train_Model.py", "--model", "Quad_neuron", "--ReLU", "0", "--epoch", "25", "--num_blocks", "5", "5", "5","--n_trials","10"],
+    ["python", "Train_Model.py", "--model", "Quad_neuron", "--ReLU", "2", "--epoch", "50", "--num_blocks", "5", "5", "5","--n_trials","50"],
+    ["python", "Train_Model.py", "--model", "Quad_neuron", "--ReLU", "1", "--epoch", "50", "--num_blocks", "5", "5", "5","--n_trials","50"],
+    ["python", "Train_Model.py", "--model", "Quad_neuron", "--ReLU", "0", "--epoch", "50", "--num_blocks", "5", "5", "5","--n_trials","50"],
+    ["python", "Train_Model.py", "--model", "Baseline", "--ReLU", "2", "--epoch", "50", "--num_blocks", "5", "5", "5","--n_trials","50"],
+    ["python", "Train_Model.py", "--model", "Baseline", "--ReLU", "1", "--epoch", "50", "--num_blocks", "5", "5", "5","--n_trials","50"],
+    ["python", "Train_Model.py", "--model", "Baseline", "--ReLU", "0", "--epoch", "50", "--num_blocks", "5", "5", "5","--n_trials","50"],
+
 ]
 
 for i, cmd in enumerate(commands, 1):
