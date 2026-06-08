@@ -146,7 +146,6 @@ if __name__ == "__main__":
             images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
             X.append(images)
             y.append(labels)
-        images, labels = load_batch()
 
         X = np.concatenate(X)
         y = np.concatenate(y)
