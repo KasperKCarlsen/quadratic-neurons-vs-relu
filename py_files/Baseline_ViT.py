@@ -1,69 +1,19 @@
+
+
 import torch
 import torch.nn as nn
-import torch.nn.init as init
 from torch.utils.data import TensorDataset, DataLoader
 from transformers import ViTForImageClassification
 
 MODEL_NAME = "google/vit-base-patch16-224"
 
 
-
-class QuadraticProjection(nn.Module):
-    def __init__(self, in_features, out_features, bias=True, full=True):
-        super().__init__()
-        self.full = full
-        self.scale = 1.0 
-
-        self.r = nn.Linear(in_features, out_features, bias=bias)
-        init.kaiming_normal_(self.r.weight)  
-
-        self.b = nn.Linear(in_features, out_features, bias=bias)
-        self.b.weight.data.fill_(0)
-        if bias:
-            self.b.bias.data.fill_(0)
-
-        if full:
-            self.g = nn.Linear(in_features, out_features, bias=bias)
-            self.g.weight.data.fill_(0)
-            if bias:
-                self.g.bias.data.fill_(1)
-
-    def forward(self, x):
-        sq = self.scale * self.b(x * x)
-        if self.full:
-            return self.r(x) * self.g(x) + sq
-        return self.r(x) + sq
-
-    @classmethod
-    def from_linear(cls, linear, full=True):
-        has_bias = linear.bias is not None
-        m = cls(linear.in_features, linear.out_features, bias=has_bias, full=full)
-        with torch.no_grad():
-            m.r.weight.copy_(linear.weight)
-            if has_bias:
-                m.r.bias.copy_(linear.bias)
-        return m
-
-
-def quadratify(model, full=True):
-    n = 0
-    for module in model.modules():
-        if (
-            isinstance(getattr(module, "query", None), nn.Linear)
-            and isinstance(getattr(module, "value", None), nn.Linear)
-        ):
-            module.query = QuadraticProjection.from_linear(module.query, full)
-            module.value = QuadraticProjection.from_linear(module.value, full)
-            n += 1
-    return n
-
-
-class Quad_adapters:
+class ViT_baseline:
 
     def __init__(
         self,
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-        full=True,            # quadratic form: True = r*g + b(x^2), False = r + b(x^2)
+        freeze_qv_linear=False,
         model_name=MODEL_NAME,
         trial=None,
     ):
@@ -72,15 +22,14 @@ class Quad_adapters:
         self.model = ViTForImageClassification.from_pretrained(
             model_name,
             num_labels=len(classes),
-            ignore_mismatched_sizes=True, 
+            ignore_mismatched_sizes=True,  # retargets the classifier head
         )
 
-        quadratify(self.model, full=full)
-
-
-        for name, param in self.model.named_parameters():
-            if ".query.r." in name or ".value.r." in name:
-                param.requires_grad = False
+        # optional matched-ablation freezing (see module docstring)
+        if freeze_qv_linear:
+            for name, param in self.model.named_parameters():
+                if ".query." in name or ".value." in name:
+                    param.requires_grad = False
 
         self.trial = trial
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -161,7 +110,7 @@ class Quad_adapters:
                 f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}"
             )
 
-    def test(self, X, y, classes):
+    def test(self, X, y):
         self.model.eval()
         correct = 0
         total = 0
@@ -178,7 +127,6 @@ class Quad_adapters:
 
         accuracy = 100 * correct / total
         return accuracy
-
 
     def fit(self, train_loader, lr, epochs):
         self.model.to(self.device)
@@ -226,13 +174,11 @@ class Quad_adapters:
         self.model.load_state_dict(torch.load(path))
 
 
-
 if __name__ == "__main__":
-    qa = Quad_adapters(classes=list(range(10)), full=True)
+    vb = ViT_baseline(classes=list(range(10)))
 
-    # dummy data in the shape ViT expects
     X = torch.randn(8, 3, 224, 224)
     y = torch.randint(0, 10, (8,))
 
-    qa.train(X, y, batch_size=4, lr=1e-3, epochs=1)
-    print("test acc:", qa.test(X, y, qa.classes))
+    vb.train(X, y, batch_size=4, lr=1e-3, epochs=1)
+    print("test acc:", vb.test(X, y))
