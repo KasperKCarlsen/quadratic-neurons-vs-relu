@@ -4,3 +4,11 @@ venv/
 models/
 .optuna/
 optuna_databases/
+data
+optuna_databases
+_pycache_/
+_pycache_
+.vscode/
+.vscode
+py_files/_pycache_/
+py_files/_pycache_
