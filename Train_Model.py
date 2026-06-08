@@ -55,7 +55,7 @@ parser.add_argument("--batch_size", type=int, default=128)
 parser.add_argument(
     "--val",
     dest="val",
-    type=bool,
+    action=argparse.BooleanOptionalAction,
     default=True,
     help="Whether to use a validation split from the training data instead of the official test set",
 )
@@ -79,6 +79,8 @@ parser.add_argument("--classes", type=int, nargs="+", default=list(range(10)))
 
 parser.add_argument("--load_path", type=str, default=None)
 
+parser.add_argument("--n_trials", type=int, required=False,default=100)
+
 parser.add_argument(
     "--test_split",
     dest="test_split",
@@ -90,25 +92,17 @@ parser.add_argument(
 
 def objective(trial, args, X_train, y_train, X_test, y_test):
     model_class = MODEL_MAP[args.model]
-    if model_class is not Quad_adapters:
-        model = model_class(
-            args.ReLU, args.num_blocks, classes=args.classes, trial=trial
-        )
+    if model_class in (Quad_neuron, Baseline):
+        model = model_class(args.ReLU, args.num_blocks, classes=args.classes, trial=trial)
     else:
-        model = model_class(
-            args.ReLU,
-            args.num_blocks,
-            args.load_path,
-            classes=args.classes,
-            trial=trial,
-        )
+        model = model_class(args.ReLU, args.num_blocks, args.load_path, classes=args.classes, trial=trial)
 
-    if model_class is not Quad_adapters and args.load_path is not None:
+    if model_class not in (LoRA, Quad_adapters) and args.load_path is not None:
         model.load(args.load_path)
 
     best_acc = 0
     accs = {}
-    save_dir = f"models/{args.model}_ReLU{args.ReLU}"
+    save_dir = f"models/{args.model}_ReLU{args.ReLU}_arc_{args.num_blocks}"
     print(save_dir)
     os.makedirs(save_dir, exist_ok=True)
 
@@ -138,10 +132,12 @@ def objective(trial, args, X_train, y_train, X_test, y_test):
 if __name__ == "__main__":
     args = parser.parse_args()
 
+
     X = []
     y = []
 
-    if True:
+
+    if args.val:
         for i in range(1, 6):
             images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
             X.append(images)
@@ -149,6 +145,11 @@ if __name__ == "__main__":
 
         X = np.concatenate(X)
         y = np.concatenate(y)
+
+        # Filter dataset to selected classes and remap labels to 0..C-1
+        X, y = get_classes_dataset(args.classes, X, y)
+        label_map = {orig: new for new, orig in enumerate(args.classes)}
+        y = np.array([label_map[int(lbl)] for lbl in y])
 
         X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
         y = torch.from_numpy(y).long()
@@ -160,7 +161,7 @@ if __name__ == "__main__":
         train_dataset, test_dataset = torch.utils.data.random_split(
             dataset,
             [train_size, test_size],
-            generator=torch.Generator().manual_seed(42),
+            generator=torch.Generator().manual_seed(42)
         )
 
         X_train = torch.stack([train_dataset[i][0] for i in range(len(train_dataset))])
@@ -168,7 +169,7 @@ if __name__ == "__main__":
 
         X_test = torch.stack([test_dataset[i][0] for i in range(len(test_dataset))])
         y_test = torch.tensor([test_dataset[i][1] for i in range(len(test_dataset))])
-
+    
     else:
         for i in range(1, 6):
             images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
@@ -177,6 +178,11 @@ if __name__ == "__main__":
 
         X = np.concatenate(X)
         y = np.concatenate(y)
+
+        # Filter dataset to selected classes and remap labels to 0..C-1
+        X, y = get_classes_dataset(args.classes, X, y)
+        label_map = {orig: new for new, orig in enumerate(args.classes)}
+        y = np.array([label_map[int(lbl)] for lbl in y])
 
         X_train = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
         y_train = torch.from_numpy(y).long()
@@ -191,14 +197,14 @@ if __name__ == "__main__":
 
     study = optuna.create_study(
         study_name=f"{args.model}_with_ReLU{args.ReLU}_optimization",
-        storage=f"sqlite:///optuna_databases/{args.model}_with_ReLU{args.ReLU}_study.db",
+        storage=f"sqlite:///optuna_databases/{args.model}_with_ReLU{args.ReLU}_arc_{args.num_blocks}_study.db",
         load_if_exists=True,
         direction="maximize",
     )
 
     study.optimize(
         lambda trial: objective(trial, args, X_train, y_train, X_test, y_test),
-        n_trials=100,
+        n_trials=args.n_trials,
     )
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])

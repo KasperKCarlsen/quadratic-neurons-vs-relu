@@ -238,13 +238,15 @@ class Quad_adapters:
                 f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}"
             )
 
-    def test(self, X, y, classes):
+    def test(self, X, y):
         self.model.eval()  # disable dropout/batchnorm training behavior
         correct = 0
         total = 0
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        train_loader = DataLoader(TensorDataset(X, y), batch_size=128)
+        self.model = self.model.to(device)
+
+        train_loader = DataLoader(TensorDataset(X, y), batch_size=128, shuffle=True)
 
         with torch.no_grad():  # disable gradient computation
             for inputs, labels in train_loader:
