@@ -124,7 +124,7 @@ class Baseline:
             self.optimizer_name = self.trial.suggest_categorical(
                 "optimizer", ["Adam", "AdamW", "SGD"]
             )
-            self.lr = self.trial.suggest_float("lr", 1e-6, 1e-2, log=True)
+            self.lr = self.trial.suggest_float("lr", 1e-6, 1e-1, log=True)
             if self.optimizer_name == "AdamW":
                 self.weight_decay = self.trial.suggest_float(
                     "weight_decay", 1e-5, 1e-1, log=True

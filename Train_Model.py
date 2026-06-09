@@ -60,8 +60,6 @@ parser.add_argument(
 )
 
 
-parser.add_argument("--lr", type=float, default=1e-3)
-
 # Recommended CLI usage:
 # --num_blocks 3 3 3
 parser.add_argument(
@@ -150,24 +148,25 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     batch_size = trial.suggest_categorical("batch_size", [64, 128, 256, 512, 1024])
 
     for i in range(args.epoch):
-        model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
+            model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
 
-        acc = model.test(X_test, y_test)
-        accs[i * args.save_epoch] = acc
+            acc = model.test(X_test, y_test)
+            epoch_idx = i * args.save_epoch
+            accs[epoch_idx] = acc
 
-        if acc > best_acc:
-            best_acc = acc
-            model.save(f"{trial_dir}/epoch{i*args.save_epoch}")
+            if acc > best_acc:
+                best_acc = acc
+                model.save(f"{trial_dir}/epoch{epoch_idx}")
 
-        # Report to the pruner every 5 epochs instead of every epoch.
-        # Finer granularity wastes a full test-set eval just to get pruned
-        # one epoch earlier; every-5 still gives the pruner enough signal
-        # while cutting eval overhead by ~4x and reducing MPS inter-worker
-        # contention during the report/prune check.
-        if (i + 1) % 5 == 0:
-            trial.report(acc, i)
-            if trial.should_prune():
-                raise optuna.TrialPruned()
+            # Report to the pruner every 5 epochs instead of every epoch.
+            # Finer granularity wastes a full test-set eval just to get pruned
+            # one epoch earlier; every-5 still gives the pruner enough signal
+            # while cutting eval overhead and reducing MPS inter-worker
+            # contention during the report/prune check.
+            if (i + 1) % 5 == 0:
+                trial.report(acc, epoch_idx)
+                if trial.should_prune():
+                    raise optuna.TrialPruned()
 
     with open(f"{trial_dir}/accuracies.pkl", "wb") as f:
         pickle.dump(accs, f)
@@ -287,6 +286,7 @@ if __name__ == "__main__":
         storage=storage,
         load_if_exists=True,
         direction="maximize",
+        pruner=optuna.pruners.MedianPruner(n_startup_trials=10, n_warmup_steps=15),
     )
 
     study.optimize(

@@ -139,7 +139,7 @@ class Quad_neuron():
         # Setup optimizer parameters once per trial if trial is provided
         if self.trial is not None:
             self.optimizer_name = self.trial.suggest_categorical("optimizer", ["Adam", "AdamW", "SGD"])
-            self.lr = self.trial.suggest_float("lr", 1e-6, 1e-2, log=True)
+            self.lr = self.trial.suggest_float("lr", 1e-6, 1e-1, log=True)
             if self.optimizer_name == "AdamW":
                 self.weight_decay = self.trial.suggest_float("weight_decay", 1e-5, 1e-1, log=True)
                 self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay, fused=self.use_amp)
