@@ -125,8 +125,9 @@ class Quad_neuron():
     def __init__(self, Relu, num_blocks, block = BasicBlock, classes = [0,1,2,3,4,5,6,7,8,9], trial = None, compile_mode = "none"):
         self.model = QResNet(Relu,block,num_blocks,classes)
         self.trial = trial
-
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if not torch.cuda.is_available():
+            raise Exception("no cuda")
+        self.device = torch.device("cuda")
         # channels_last + bf16 autocast is the standard fast recipe for conv
         # nets on Tensor Core GPUs (A100); keep plain fp32/contiguous on CPU.
         self.memory_format = torch.channels_last if self.device.type == "cuda" else torch.contiguous_format

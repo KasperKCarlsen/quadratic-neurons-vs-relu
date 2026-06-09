@@ -11,5 +11,9 @@ commands = [
 
 for i, cmd in enumerate(commands, 1):
     print(f"Running: {' '.join(cmd)}")
-    with open(f"Run_number/run_{i}.txt", "w") as f:
-        subprocess.run(cmd, stdout=f, stderr=f)
+    try:
+        with open(f"Run_number/run_{i}.txt", "w") as f:
+            subprocess.run(cmd, stdout=f, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"{e.stderr}")
+        break
