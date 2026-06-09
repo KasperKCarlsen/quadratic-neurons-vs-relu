@@ -227,7 +227,6 @@ class LoRA:
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         trial=None,
         rank=4,
-        compile_mode="none",
     ):
         self.model = QResNetLoRA(Relu, block, num_blocks, classes, rank=rank)
 
@@ -263,10 +262,7 @@ class LoRA:
         self.memory_format = torch.channels_last if self.device.type == "cuda" else torch.contiguous_format
         self.use_amp = self.device.type == "cuda"
         self.model.to(self.device, memory_format=self.memory_format)
-        # Optional torch.compile. Keep self.model as the *uncompiled* module so
-        # state_dict()/save()/load() stay prefix-free; route forward through
-        # self.fwd. See Train_Model.py --compile for modes/caveats.
-        self.fwd = self.model if compile_mode == "none" else torch.compile(self.model, mode=compile_mode)
+        self.fwd = self.model
         self.criterion = nn.CrossEntropyLoss()
 
         if self.trial is not None:
@@ -376,5 +372,5 @@ class LoRA:
         torch.save(self.model.state_dict(), f"{path}")
 
     def load(self, path):
-        map_location = "cuda" if torch.cuda.is_available() else "cpu"
+        map_location = "cuda"
         self.model.load_state_dict(torch.load(path, map_location=map_location, weights_only=True))

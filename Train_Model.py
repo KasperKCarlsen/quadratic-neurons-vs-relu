@@ -88,14 +88,6 @@ parser.add_argument(
     help="Fraction of the loaded data to reserve for testing",
 )
 
-parser.add_argument(
-    "--compile",
-    choices=["none", "default", "reduce-overhead", "max-autotune"],
-    default="none",
-    help="torch.compile mode applied per trial. 'none' is safest for short HPO "
-    "trials; 'reduce-overhead' (CUDA graphs) is usually the best fit for this "
-    "small model on an A100. VALIDATE the chosen mode locally before a long run.",
-)
 
 parser.add_argument(
     "--storage",
@@ -135,9 +127,9 @@ def build_storage(backend, name_base):
 def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     model_class = MODEL_MAP[args.model]
     if model_class in (Quad_neuron, Baseline):
-        model = model_class(args.ReLU, args.num_blocks, classes=args.classes, trial=trial, compile_mode=args.compile)
+        model = model_class(args.ReLU, args.num_blocks, classes=args.classes, trial=trial)
     else:
-        model = model_class(args.ReLU, args.num_blocks, args.load_path, classes=args.classes, trial=trial, compile_mode=args.compile)
+        model = model_class(args.ReLU, args.num_blocks, args.load_path, classes=args.classes, trial=trial)
 
     if model_class not in (LoRA, Quad_adapters) and args.load_path is not None:
         model.load(args.load_path)
@@ -153,32 +145,32 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     best_acc = 0
     accs = {}
 
-    batch_size = trial.suggest_int("batch_size", 32, 512)
+    # Categorical powers-of-two: avoids tiny batches (e.g. 35) that starve the
+    # GPU, and limits shapes to 5 values so cudnn.benchmark tunes once per shape.
+    batch_size = trial.suggest_categorical("batch_size", [64, 128, 256, 512, 1024])
 
-    try:
-        for i in range(args.epoch):
-            model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
+    for i in range(args.epoch):
+        model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
 
-            acc = model.test(X_test, y_test)
-            accs[i * args.save_epoch] = acc
+        acc = model.test(X_test, y_test)
+        accs[i * args.save_epoch] = acc
 
-            if acc > best_acc:
-                best_acc = acc
-                model.save(f"{trial_dir}/epoch{i*args.save_epoch}")
+        if acc > best_acc:
+            best_acc = acc
+            model.save(f"{trial_dir}/epoch{i*args.save_epoch}")
 
+        # Report to the pruner every 5 epochs instead of every epoch.
+        # Finer granularity wastes a full test-set eval just to get pruned
+        # one epoch earlier; every-5 still gives the pruner enough signal
+        # while cutting eval overhead by ~4x and reducing MPS inter-worker
+        # contention during the report/prune check.
+        if (i + 1) % 5 == 0:
             trial.report(acc, i)
-
             if trial.should_prune():
                 raise optuna.TrialPruned()
 
-        with open(f"{trial_dir}/accuracies.pkl", "wb") as f:
-            pickle.dump(accs, f)
-    finally:
-        # Free compiled artifacts / CUDA-graph memory pools between trials so a
-        # long study (100+ compiles) doesn't accumulate them. No-op when not
-        # compiling, and guarded for older torch without compiler.reset.
-        if args.compile != "none" and hasattr(torch, "compiler") and hasattr(torch.compiler, "reset"):
-            torch.compiler.reset()
+    with open(f"{trial_dir}/accuracies.pkl", "wb") as f:
+        pickle.dump(accs, f)
 
     # Return the best epoch (matches the checkpoint we keep) rather than the
     # last epoch. Revert to `return acc` if you want last-epoch semantics.

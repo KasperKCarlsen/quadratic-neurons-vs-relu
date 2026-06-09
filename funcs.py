@@ -59,7 +59,7 @@ def load_checkpoint(path):
     time they're constructed, which happens once per Optuna trial (often
     100+ times per run). Caching by path turns that into a single read.
     """
-    map_location = "cuda" if torch.cuda.is_available() else "cpu"
+    map_location = "cuda"
     # weights_only=True is safe (checkpoints are plain state_dicts) and silences
     # the PyTorch>=2.4 pickle-security warning / future default flip.
     return torch.load(path, map_location=map_location, weights_only=True)
