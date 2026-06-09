@@ -60,6 +60,8 @@ parser.add_argument(
 )
 
 
+parser.add_argument("--lr", type=float, default=1e-3)
+
 # Recommended CLI usage:
 # --num_blocks 3 3 3
 parser.add_argument(
@@ -75,6 +77,13 @@ parser.add_argument(
 parser.add_argument("--classes", type=int, nargs="+", default=list(range(10)))
 
 parser.add_argument("--load_path", type=str, default=None)
+
+parser.add_argument(
+    "--amp_dtype",
+    choices=["bf16", "fp16", "off"],
+    default="bf16",
+    help="Autocast dtype. bf16 is the A100/Ampere default; use fp16 on V100/Volta (no hardware bf16) - fp16 enables a GradScaler automatically. 'off' disables autocast (fp32).",
+)
 
 parser.add_argument("--n_trials", type=int, required=False,default=100)
 
@@ -125,9 +134,9 @@ def build_storage(backend, name_base):
 def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     model_class = MODEL_MAP[args.model]
     if model_class in (Quad_neuron, Baseline):
-        model = model_class(args.ReLU, args.num_blocks, classes=args.classes, trial=trial)
+        model = model_class(args.ReLU, args.num_blocks, classes=args.classes, trial=trial, amp_dtype=args.amp_dtype)
     else:
-        model = model_class(args.ReLU, args.num_blocks, args.load_path, classes=args.classes, trial=trial)
+        model = model_class(args.ReLU, args.num_blocks, args.load_path, classes=args.classes, trial=trial, amp_dtype=args.amp_dtype)
 
     if model_class not in (LoRA, Quad_adapters) and args.load_path is not None:
         model.load(args.load_path)
@@ -148,25 +157,24 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     batch_size = trial.suggest_categorical("batch_size", [64, 128, 256, 512, 1024])
 
     for i in range(args.epoch):
-            model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
+        model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
 
-            acc = model.test(X_test, y_test)
-            epoch_idx = i * args.save_epoch
-            accs[epoch_idx] = acc
+        acc = model.test(X_test, y_test)
+        accs[i * args.save_epoch] = acc
 
-            if acc > best_acc:
-                best_acc = acc
-                model.save(f"{trial_dir}/epoch{epoch_idx}")
+        if acc > best_acc:
+            best_acc = acc
+            model.save(f"{trial_dir}/epoch{i*args.save_epoch}")
 
-            # Report to the pruner every 5 epochs instead of every epoch.
-            # Finer granularity wastes a full test-set eval just to get pruned
-            # one epoch earlier; every-5 still gives the pruner enough signal
-            # while cutting eval overhead and reducing MPS inter-worker
-            # contention during the report/prune check.
-            if (i + 1) % 5 == 0:
-                trial.report(acc, epoch_idx)
-                if trial.should_prune():
-                    raise optuna.TrialPruned()
+        # Report to the pruner every 5 epochs instead of every epoch.
+        # Finer granularity wastes a full test-set eval just to get pruned
+        # one epoch earlier; every-5 still gives the pruner enough signal
+        # while cutting eval overhead by ~4x and reducing MPS inter-worker
+        # contention during the report/prune check.
+        if (i + 1) % 5 == 0:
+            trial.report(acc, i)
+            if trial.should_prune():
+                raise optuna.TrialPruned()
 
     with open(f"{trial_dir}/accuracies.pkl", "wb") as f:
         pickle.dump(accs, f)
@@ -286,7 +294,6 @@ if __name__ == "__main__":
         storage=storage,
         load_if_exists=True,
         direction="maximize",
-        pruner=optuna.pruners.MedianPruner(n_startup_trials=10, n_warmup_steps=15),
     )
 
     study.optimize(

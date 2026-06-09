@@ -9,7 +9,7 @@ import torchvision.transforms as transforms
 import pickle
 import numpy as np
 
-from funcs import load_checkpoint, iterate_batches
+from funcs import load_checkpoint, iterate_batches, resolve_amp_dtype
 
 # torchvision.datasets.CIFAR10(root='./data', download=True) #run once
 
@@ -106,6 +106,7 @@ class Baseline:
         block=BasicBlock,
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         trial=None,
+        amp_dtype="bf16",
     ):
         self.model = QResNet(Relu, block, num_blocks, classes)
         self.trial = trial
@@ -115,7 +116,9 @@ class Baseline:
         # channels_last + bf16 autocast is the standard fast recipe for conv
         # nets on Tensor Core GPUs (A100); keep plain fp32/contiguous on CPU.
         self.memory_format = torch.channels_last if self.device.type == "cuda" else torch.contiguous_format
-        self.use_amp = self.device.type == "cuda"
+        self.use_amp, self.amp_dtype, _needs_scaler = resolve_amp_dtype(amp_dtype, self.device)
+        # fp16 (V100/Volta path) needs gradient scaling; bf16 (A100) does not.
+        self.scaler = torch.amp.GradScaler("cuda", enabled=_needs_scaler)
         self.model.to(self.device, memory_format=self.memory_format)
         self.fwd = self.model
         self.criterion = nn.CrossEntropyLoss()
@@ -124,7 +127,7 @@ class Baseline:
             self.optimizer_name = self.trial.suggest_categorical(
                 "optimizer", ["Adam", "AdamW", "SGD"]
             )
-            self.lr = self.trial.suggest_float("lr", 1e-6, 1e-1, log=True)
+            self.lr = self.trial.suggest_float("lr", 1e-6, 1e-2, log=True)
             if self.optimizer_name == "AdamW":
                 self.weight_decay = self.trial.suggest_float(
                     "weight_decay", 1e-5, 1e-1, log=True
@@ -166,11 +169,12 @@ class Baseline:
                 images = images.to(memory_format=self.memory_format)
 
                 self.optimizer.zero_grad(set_to_none=True)
-                with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
+                with torch.autocast(device_type=self.device.type, dtype=self.amp_dtype, enabled=self.use_amp):
                     outputs = self.fwd(images)
                     loss = self.criterion(outputs, labels)
-                loss.backward()
-                self.optimizer.step()
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
 
                 loss_sum += loss.detach() * labels.size(0)
                 correct += (outputs.detach().argmax(1) == labels).sum()
@@ -189,7 +193,7 @@ class Baseline:
         correct = torch.zeros((), device=self.device)
         total = torch.zeros((), device=self.device)
 
-        with torch.inference_mode(), torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
+        with torch.inference_mode(), torch.autocast(device_type=self.device.type, dtype=self.amp_dtype, enabled=self.use_amp):
             # No backward pass during eval, so memory pressure is far lower
             # than training - use a bigger batch (matches the upper end of
             # the trial's batch_size search space, which already has to fit

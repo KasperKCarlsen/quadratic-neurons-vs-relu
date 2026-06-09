@@ -20,12 +20,15 @@ cd ~/Fagprojekt
 mkdir -p logs optuna_databases
 
 # ---- experiment config (edit these) ---------------------------------
-NUM_WORKERS=4                 # processes sharing the one GPU. Raise carefully: watch VRAM + cores.
+NUM_WORKERS=3                 # processes sharing the one GPU. Raise carefully: watch VRAM + cores.
 MODEL=Quad_neuron
 RELU=2
-BLOCKS=(18 18 18)                # ResNet-20-scale. (18 18 18) is the heavy variant.
+BLOCKS=(5 5 5)                # ResNet-20-scale. (18 18 18) is the heavy variant.
 EPOCHS=40
 TRIALS_PER_WORKER=6          # total trials = NUM_WORKERS x this = 75 here
+AMP_DTYPE=bf16                # bf16 = A100/Ampere default. Set to fp16 for THIS
+                              # cluster's gpuv100 queue (Volta has no hardware
+                              # bf16); fp16 auto-enables a GradScaler. 'off' = fp32.
 CLASSES=(0 1 2 3 4 5 6 7 8 9) # CIFAR-10 classes to keep; remapped to 0..C-1 internally.
 LOAD_PATH=""                  # pretrained Baseline checkpoint. REQUIRED for Quad_adapters
                               # and LoRA; leave "" for Quad_neuron / Baseline (unused).
@@ -81,6 +84,7 @@ for i in $(seq 1 "$NUM_WORKERS"); do
         --classes "${CLASSES[@]}" \
         --epoch "$EPOCHS" \
         --n_trials "$TRIALS_PER_WORKER" \
+        --amp_dtype "$AMP_DTYPE" \
         --storage journal \
         "${LOAD_PATH_ARG[@]}" \
         > "logs/${MODEL}_mps_${LSB_JOBID:-0}_w${i}.out" \
