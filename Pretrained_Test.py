@@ -30,3 +30,4 @@ inputs = processor(
 )
 
 outputs = model(**inputs)
+print(outputs)
