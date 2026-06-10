@@ -1,0 +1,16 @@
+import subprocess
+import os
+
+
+os.makedirs("Run_number", exist_ok=True)
+
+commands = [
+    ["python", "Train_Model.py", "--model", "Quad_neuron", "--ReLU", "2", "--epoch", "100", "--num_blocks", "18", "18", "18"],
+    ["python", "Train_Model.py", "--model", "Quad_neuron", "--ReLU", "1", "--epoch", "100", "--num_blocks", "18", "18", "18"],
+    ["python", "Train_Model.py", "--model", "Quad_neuron", "--ReLU", "0", "--epoch", "100", "--num_blocks", "18", "18", "18"],
+]
+
+for i, cmd in enumerate(commands, 1):
+    print(f"Running: {' '.join(cmd)}")
+    with open(f"logs/run_{i}.txt", "w") as f:
+        subprocess.run(cmd, stdout=f, stderr=f)
