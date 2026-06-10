@@ -1,6 +1,6 @@
 #!/bin/bash
 #     mkdir -p logs && bsub < a100_test.lsf
-#BSUB -J quad_mps
+#BSUB -J ReLU_2_all
 #BSUB -q gpua100                                  # A100 queue; verify with `bqueues`
 #BSUB -gpu "num=1:mode=exclusive_process:mps=yes" # mps=yes -> processes in THIS job share the GPU
 #BSUB -n 9                                        # 4 cores/worker x 4 workers.

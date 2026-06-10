@@ -1,6 +1,6 @@
 #!/bin/bash
 #     mkdir -p logs && bsub < a100_test.lsf
-#BSUB -J quad_mps
+#BSUB -J quick_test
 #BSUB -q gpuv100                                  # A100 queue; verify with `bqueues`
 #BSUB -gpu "num=1:mode=exclusive_process:mps=yes" # mps=yes -> processes in THIS job share the GPU
 #BSUB -n 4                                        # 4 cores/worker x 4 workers.
@@ -21,8 +21,8 @@ mkdir -p logs optuna_databases
 # ---- experiment config (edit these) ---------------------------------
 NUM_WORKERS=2                 # MPS workers sharing the GPU. Raise carefully: watch VRAM + cores.
 RELU=2
-EPOCHS=50
-TRIALS_PER_WORKER=10          # total trials per (model x arch) = NUM_WORKERS x this = 20
+EPOCHS=5
+TRIALS_PER_WORKER=3          # total trials per (model x arch) = NUM_WORKERS x this = 20
 AMP_DTYPE=fp16                # bf16 = A100/Ampere default. fp16 for Volta; 'off' = fp32.
 CLASSES=(0 1 2 3 4 5 6 7 8 9) # CIFAR-10 classes to keep; remapped to 0..C-1 internally.
 LOAD_PATH=""                  # pretrained Baseline checkpoint. REQUIRED for Quad_adapters / LoRA.
@@ -39,9 +39,7 @@ MODELS=(
 # Each entry is "B1 B2 B3" (space-separated num_blocks).
 # e.g. "3 3 3" = ResNet-20-scale, "9 9 9" = ResNet-56, "18 18 18" = ResNet-110-scale
 ARCHITECTURES=(
-    "3 3 3"
-    "9 9 9"
-    "18 18 18"
+    "1 1 1"
 )
 # Total runs = len(MODELS) x len(ARCHITECTURES). Budget walltime accordingly.
 # ---------------------------------------------------------------------
