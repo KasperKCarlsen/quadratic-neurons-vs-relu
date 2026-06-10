@@ -4,6 +4,11 @@ import torch.nn.init as init
 from torch.utils.data import TensorDataset, DataLoader
 from transformers import ViTForImageClassification
 
+from datasets import load_dataset
+from funcs import extract_features
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+
 MODEL_NAME = "google/vit-base-patch16-224"
 
 
@@ -230,9 +235,25 @@ class Quad_adapters:
 if __name__ == "__main__":
     qa = Quad_adapters(classes=list(range(10)), full=True)
 
-    # dummy data in the shape ViT expects
-    X = torch.randn(8, 3, 224, 224)
-    y = torch.randint(0, 10, (8,))
+    # # dummy data in the shape ViT expects
+    # X = torch.randn(8, 3, 224, 224)
+    # y = torch.randint(0, 10, (8,))
 
-    qa.train(X, y, batch_size=4, lr=1e-3, epochs=1)
-    print("test acc:", qa.test(X, y))
+    # qa.train(X, y, batch_size=4, lr=1e-3, epochs=1)
+    # print("test acc:", qa.test(X, y))
+
+    # Test on cifar10 before training
+    dataset = load_dataset("cifar10")
+    
+    print("Extracting training features...")
+    X_train, y_train = extract_features(dataset["train"])
+    print("Extracting test features...")
+    X_test, y_test = extract_features(dataset["test"])
+
+    classifier = LogisticRegression(max_iter=1000, C=1.0)
+    classifier.fit(X_train, y_train)
+
+    # Evaluate
+    y_pred = classifier.predict(X_test)
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"Test Accuracy (zero-shot features + logistic regression): {accuracy:.4f}")
