@@ -275,7 +275,12 @@ if __name__ == "__main__":
     # save_dir and the pickled args only depend on the (fixed) CLI arguments,
     # not on anything Optuna suggests per trial - compute and write them once
     # instead of redoing it on every single trial.
-    save_dir = f"models/{args.model}_ReLU{args.ReLU}_arc_{args.num_blocks}"
+    # Arc string used consistently in save_dir, storage filename, and study name
+    # so every (model, ReLU, architecture) combination is fully unambiguous.
+    arc_str = " ".join(str(b) for b in args.num_blocks)  # e.g. "18 18 18"
+    name_base = f"{args.model}_with_ReLU{args.ReLU}_arc_({arc_str})"
+
+    save_dir = f"models/{name_base}"
     print(save_dir)
     os.makedirs(save_dir, exist_ok=True)
 
@@ -286,14 +291,16 @@ if __name__ == "__main__":
     # job array runs many workers against this same study on a networked
     # filesystem; 'sqlite' is fine for a single process. load_if_exists lets
     # every array task attach to the one study instead of clobbering it.
-    storage = build_storage(
-        args.storage, f"{args.model}_with_ReLU{args.ReLU}_arc_{args.num_blocks}"
-    )
+    storage = build_storage(args.storage, name_base)
     study = optuna.create_study(
-        study_name=f"{args.model}_with_ReLU{args.ReLU}_optimization",
+        study_name=name_base,
         storage=storage,
         load_if_exists=True,
         direction="maximize",
+        pruner=optuna.pruners.MedianPruner(
+            n_startup_trials=10,   # complete 5 trials untouched before pruner activates
+            n_warmup_steps=25,     # within each trial, ignore the first 5 epoch reports
+        ),
     )
 
     study.optimize(

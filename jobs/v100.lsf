@@ -1,0 +1,195 @@
+#!/bin/bash
+#     mkdir -p logs && bsub < a100_test.lsf
+#BSUB -J quad_mps
+#BSUB -q gpuv100                                  # A100 queue; verify with `bqueues`
+#BSUB -gpu "num=1:mode=exclusive_process:mps=yes" # mps=yes -> processes in THIS job share the GPU
+#BSUB -n 4                                        # 4 cores/worker x 4 workers.
+                                                   # Keep total <=16 so the node's 2nd A100 stays usable.
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=2GB]"                         # per-CORE -> 24GB total. Trim after checking `bstat -M`.
+#BSUB -W 1:00                                     # walltime HH:MM. Budget ~1h per (model x arch) combo;
+                                                   # set to N_combos x ~1h. GPU cap is 24:00.
+#BSUB -o logs/quad_mps_%J.out                      # job-level stdout (worker output is redirected separately)
+#BSUB -e logs/quad_mps_%J.err
+#BSUB -B
+#BSUB -N
+#BSUB -u s234813@dtu.dk
+set -euo pipefail
+cd ~/Fagprojekt
+mkdir -p logs optuna_databases
+
+# ---- experiment config (edit these) ---------------------------------
+NUM_WORKERS=2                 # MPS workers sharing the GPU. Raise carefully: watch VRAM + cores.
+RELU=2
+EPOCHS=50
+TRIALS_PER_WORKER=10          # total trials per (model x arch) = NUM_WORKERS x this = 20
+AMP_DTYPE=fp16                # bf16 = A100/Ampere default. fp16 for Volta; 'off' = fp32.
+CLASSES=(0 1 2 3 4 5 6 7 8 9) # CIFAR-10 classes to keep; remapped to 0..C-1 internally.
+LOAD_PATH=""                  # pretrained Baseline checkpoint. REQUIRED for Quad_adapters / LoRA.
+
+# ---- models to sweep ------------------------------------------------
+# Valid values: Quad_neuron  Quad_adapters  Baseline  LoRA
+# Note: Quad_adapters and LoRA require LOAD_PATH to be set.
+MODELS=(
+    "Quad_neuron"
+    "Baseline"
+)
+
+# ---- architectures to sweep -----------------------------------------
+# Each entry is "B1 B2 B3" (space-separated num_blocks).
+# e.g. "3 3 3" = ResNet-20-scale, "9 9 9" = ResNet-56, "18 18 18" = ResNet-110-scale
+ARCHITECTURES=(
+    "3 3 3"
+    "9 9 9"
+    "18 18 18"
+)
+# Total runs = len(MODELS) x len(ARCHITECTURES). Budget walltime accordingly.
+# ---------------------------------------------------------------------
+
+# Fail fast if any model requiring a checkpoint has no LOAD_PATH set.
+for MODEL in "${MODELS[@]}"; do
+    case "$MODEL" in
+        Quad_adapters|LoRA)
+            if [ -z "$LOAD_PATH" ]; then
+                echo "ERROR: MODEL=$MODEL requires LOAD_PATH." >&2; exit 1
+            fi
+            if [ ! -f "$LOAD_PATH" ]; then
+                echo "ERROR: LOAD_PATH '$LOAD_PATH' not found." >&2; exit 1
+            fi
+            ;;
+    esac
+done
+
+LOAD_PATH_ARG=()
+[ -n "$LOAD_PATH" ] && LOAD_PATH_ARG=(--load_path "$LOAD_PATH")
+
+N_COMBOS=$(( ${#MODELS[@]} * ${#ARCHITECTURES[@]} ))
+echo "Job ${LSB_JOBID:-?} started $(date) on $(hostname)"
+echo "  models=${#MODELS[@]}  architectures=${#ARCHITECTURES[@]}  total_runs=${N_COMBOS}  workers_per_run=${NUM_WORKERS}"
+
+# --- Environment -----------------------------------------------------
+# module load cuda/12.4    # uncomment ONLY if torch can't see the GPU
+source .optuna/bin/activate
+# source ~/miniconda3/etc/profile.d/conda.sh && conda activate cifar
+
+export PYTHONUNBUFFERED=1
+
+NPROC=${LSB_DJOB_NUMPROC:-16}
+THREADS=$(( NPROC / NUM_WORKERS ))
+[ "$THREADS" -lt 1 ] && THREADS=1
+export OMP_NUM_THREADS=$THREADS
+export MKL_NUM_THREADS=$THREADS
+
+# --- GPU utilisation sampler (runs for the whole job) ----------------
+GPU_LOG="logs/gpu_${LSB_JOBID:-0}.log"
+( echo "timestamp,gpu_util_%,mem_util_%,mem_used_MiB,mem_total_MiB,power_W"
+  while true; do
+      nvidia-smi --query-gpu=timestamp,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw \
+                 --format=csv,noheader,nounits
+      sleep 30
+  done ) > "$GPU_LOG" &
+GPU_MON_PID=$!
+
+# ---- per-(model, architecture) runner ------------------------------
+# name_base mirrors Train_Model.py: "{model}_with_ReLU{relu}_arc_({arc_str})"
+# This is used as the study name, storage filename, and save_dir — all three
+# are now identical, so there is no ambiguity regardless of how many sweeps run.
+run_experiment() {
+    local model="$1"
+    local blocks_str="$2"           # e.g. "18 18 18"
+    local blocks_arr=($blocks_str)  # split into array for --num_blocks
+
+    local name_base="${model}_with_ReLU${RELU}_arc_(${blocks_str})"
+    # Shell-safe version for log filenames (spaces -> underscores).
+    local name_safe="${model}_with_ReLU${RELU}_arc_(${blocks_str// /_})"
+    local journal_file="optuna_databases/${name_base}.log"
+    local db_file="optuna_databases/${name_base}_study.db"
+
+    echo ""
+    echo "========================================================"
+    echo "  Model: ${model}  Architecture: ${blocks_str}  [$(date)]"
+    echo "========================================================"
+
+    # Launch workers -----------------------------------------------
+    local pids=()
+    for i in $(seq 1 "$NUM_WORKERS"); do
+        python Train_Model.py \
+            --model "$model" \
+            --ReLU "$RELU" \
+            --num_blocks "${blocks_arr[@]}" \
+            --classes "${CLASSES[@]}" \
+            --epoch "$EPOCHS" \
+            --n_trials "$TRIALS_PER_WORKER" \
+            --amp_dtype "$AMP_DTYPE" \
+            --storage journal \
+            "${LOAD_PATH_ARG[@]}" \
+            > "logs/${name_safe}_${LSB_JOBID:-0}_w${i}.out" \
+            2> "logs/${name_safe}_${LSB_JOBID:-0}_w${i}.err" &
+        pids+=($!)
+        echo "  launched worker $i (pid $!)"
+        sleep 5
+    done
+
+    # Mirror worker logs into job stdout so bpeek shows them live --
+    tail -n +1 -F "logs/${name_safe}_${LSB_JOBID:-0}_w"*.out \
+                 "logs/${name_safe}_${LSB_JOBID:-0}_w"*.err &
+    local TAIL_PID=$!
+
+    # Wait + report ------------------------------------------------
+    local fail=0
+    for idx in "${!pids[@]}"; do
+        local pid=${pids[$idx]}
+        if ! wait "$pid"; then
+            echo "WARNING: worker $((idx+1)) (pid $pid) exited non-zero -> see its .err log"
+            fail=1
+        fi
+    done
+
+    sleep 2
+    kill "$TAIL_PID" 2>/dev/null || true
+    wait "$TAIL_PID" 2>/dev/null || true
+
+    echo "  ${name_base} finished $(date) | any_worker_failed=${fail}"
+
+    # Migrate journal -> SQLite DB ---------------------------------
+    echo "  Migrating to: ${db_file}"
+    python3 - <<PYEOF
+import optuna
+from optuna.storages import JournalStorage, RDBStorage
+from optuna.storages.journal import JournalFileBackend
+optuna.logging.set_verbosity(optuna.logging.WARNING)
+src = JournalStorage(JournalFileBackend("${journal_file}"))
+dst = RDBStorage(
+    url="sqlite:///${db_file}",
+    engine_kwargs={"connect_args": {"timeout": 30}},
+)
+name = "${name_base}"
+optuna.copy_study(from_study_name=name, from_storage=src, to_storage=dst, to_study_name=name)
+s = optuna.load_study(study_name=name, storage=dst)
+print(f"  Migrated {len(s.trials)} trials. Best value: {s.best_value:.4f}")
+print(f"  Best params: {s.best_params}")
+PYEOF
+
+    return "$fail"
+}
+
+# ---- main loop ------------------------------------------------------
+overall_fail=0
+run_index=0
+for model in "${MODELS[@]}"; do
+    for arch in "${ARCHITECTURES[@]}"; do
+        run_index=$(( run_index + 1 ))
+        echo ""
+        echo "--- Run ${run_index}/${N_COMBOS} ---"
+        if ! run_experiment "$model" "$arch"; then
+            overall_fail=1
+        fi
+    done
+done
+
+kill "$GPU_MON_PID" 2>/dev/null || true
+wait "$GPU_MON_PID" 2>/dev/null || true
+
+echo ""
+echo "All ${N_COMBOS} runs finished $(date) | any_failed=${overall_fail}"
+exit "${overall_fail}"
