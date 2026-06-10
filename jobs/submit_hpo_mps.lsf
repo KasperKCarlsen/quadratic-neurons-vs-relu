@@ -1,15 +1,12 @@
 #!/bin/bash
 #     mkdir -p logs && bsub < submit_hpo_mps.lsf
 #BSUB -J quad_mps
-#BSUB -q gpua100                                  # A100 queue; verify with `bqueues`
-#BSUB -gpu "num=1:mode=exclusive_process:mps=yes" # mps=yes -> processes in THIS job share the GPU
-#BSUB -n 12                                        # 4 cores/worker x 3 workers. DTU's MPS example uses 12.
-                                                   # Keep total <=16 so the node's 2nd A100 stays usable.
+#BSUB -q gpua100
+#BSUB -gpu "num=1:mode=exclusive_process:mps=yes" 
+#BSUB -n 12                                     
 #BSUB -R "span[hosts=1]"
-#BSUB -R "rusage[mem=2GB]"                         # per-CORE -> 24GB total. Trim after checking `bstat -M`.
-#BSUB -W 1:00                                     # walltime HH:MM (GPU cap is 24:00). Trim for backfill once timed.
-#BSUB -o logs/quad_mps_%J.out                      # job-level stdout (worker output is redirected separately below)
-#BSUB -e logs/quad_mps_%J.err
+#BSUB -R "rusage[mem=1GB]"                        
+#BSUB -W 1:00                                     
 #BSUB -B
 #BSUB -N
 #BSUB -u s234813@dtu.dk
@@ -17,18 +14,15 @@ set -euo pipefail
 cd ~/Fagprojekt
 mkdir -p logs optuna_databases
 # ---- experiment config (edit these) ---------------------------------
-NUM_WORKERS=3                 # processes sharing the one GPU. Raise carefully: watch VRAM + cores.
+NUM_WORKERS=2
 MODEL=Quad_neuron
 RELU=2
-BLOCKS=(5 5 5)                # ResNet-20-scale. (18 18 18) is the heavy variant.
+BLOCKS=(5 5 5)                
 EPOCHS=40
-TRIALS_PER_WORKER=6          # total trials = NUM_WORKERS x this = 75 here
-AMP_DTYPE=ff16                # bf16 = A100/Ampere default. Set to fp16 for THIS
-                              # cluster's gpuv100 queue (Volta has no hardware
-                              # bf16); fp16 auto-enables a GradScaler. 'off' = fp32.
-CLASSES=(0 1 2 3 4 5 6 7 8 9) # CIFAR-10 classes to keep; remapped to 0..C-1 internally.
-LOAD_PATH=""                  # pretrained Baseline checkpoint. REQUIRED for Quad_adapters
-                              # and LoRA; leave "" for Quad_neuron / Baseline (unused).
+TRIALS_PER_WORKER=15     
+AMP_DTYPE=bf16               # bf16 = A100/Ampere default. Set to fp16 for THIS cluster's gpuv100 queue (Volta has no hardware bf16); fp16 auto-enables a GradScaler. 'off' = fp32.
+CLASSES=(0 1 2 3 4 5 6 7 8 9) 
+LOAD_PATH=""                
 # ---------------------------------------------------------------------
 # Quad_adapters and LoRA adapt a pretrained Baseline and will error without a
 # checkpoint; fail fast here rather than after queueing + launching workers.
@@ -85,7 +79,7 @@ for i in $(seq 1 "$NUM_WORKERS"); do
         2> "logs/${MODEL}_mps_${LSB_JOBID:-0}_w${i}.err" &
     pids+=($!)
     echo "  launched worker $i (pid $!)"
-    sleep 5   # small stagger: lets worker 1 lead on study creation / first compile
+    sleep 10   # small stagger: lets worker 1 lead on study creation / first compile
 done
 # --- Live-stream worker logs into THIS job's stdout ------------------
 # `bpeek <jobid>` only shows the job's own stdout/stderr, so on its own it would
@@ -101,6 +95,17 @@ TAIL_PID=$!
 # --- Wait + report ---------------------------------------------------
 # Wait on each PID individually so one failed worker (e.g. CUDA OOM if you
 # over-pack the GPU) is reported but the others still finish their trials.
+
+GPU_LOG="logs/gpu_${LSB_JOBID:-0}.log"
+( echo "timestamp,gpu_util_%,mem_util_%,mem_used_MiB,mem_total_MiB,power_W"
+  while true; do
+      nvidia-smi --query-gpu=timestamp,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw \
+                 --format=csv,noheader,nounits
+      sleep 30
+  done ) > "$GPU_LOG" &
+GPU_MON_PID=$!
+
+
 fail=0
 for idx in "${!pids[@]}"; do
     pid=${pids[$idx]}
@@ -113,5 +118,8 @@ done
 sleep 2
 kill "$TAIL_PID" 2>/dev/null || true
 wait "$TAIL_PID" 2>/dev/null || true
+kill "$GPU_MON_PID" 2>/dev/null || true
+wait "$GPU_MON_PID" 2>/dev/null || true
+
 echo "Job finished $(date) | any_worker_failed=${fail}"
 exit "$fail"
