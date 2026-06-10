@@ -4,12 +4,8 @@ venv/
 models/
 .optuna/
 optuna_databases/
-data
-optuna_databases
 __pycache__/
-__pycache__
 .vscode/
-.vscode
 py_files/__pycache__/
-py_files/__pycache__
 Run_number/
+logs/
