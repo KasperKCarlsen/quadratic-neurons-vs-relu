@@ -145,9 +145,7 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     best_acc = 0
     accs = {}
 
-    # Categorical powers-of-two: avoids tiny batches (e.g. 35) that starve the
-    # GPU, and limits shapes to 5 values so cudnn.benchmark tunes once per shape.
-    batch_size = trial.suggest_categorical("batch_size", [64, 128, 256, 512, 1024])
+    batch_size = trial.suggest_int("batch_size", 32, 512)
 
     for i in range(args.epoch):
         model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
