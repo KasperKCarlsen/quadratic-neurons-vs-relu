@@ -180,10 +180,7 @@ class Baseline:
                 correct += (outputs.detach().argmax(1) == labels).sum()
                 total += labels.size(0)
 
-            print(
-                f"Epoch {epoch+1}/{epochs} | "
-                f"Loss: {(loss_sum / total).item():.4f} | Acc: {(correct / total).item():.4f}"
-            )
+
 
         return None
 

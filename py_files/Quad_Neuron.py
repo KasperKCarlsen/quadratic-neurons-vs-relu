@@ -11,8 +11,6 @@ import numpy as np
 
 from funcs import load_checkpoint, iterate_batches, resolve_amp_dtype
 
-#torchvision.datasets.CIFAR10(root='./data', download=True) #run once
-
 class LambdaLayer(nn.Module):
     def __init__(self, lambd):
         super(LambdaLayer, self).__init__()
@@ -130,7 +128,7 @@ class Quad_neuron():
         self.device = torch.device("cuda")
         # channels_last + bf16 autocast is the standard fast recipe for conv
         # nets on Tensor Core GPUs (A100); keep plain fp32/contiguous on CPU.
-        self.memory_format = torch.channels_last if self.device.type == "cuda" else torch.contiguous_format
+        self.memory_format = torch.channels_last
         self.use_amp, self.amp_dtype, _needs_scaler = resolve_amp_dtype(amp_dtype, self.device)
         # fp16 (V100/Volta path) needs gradient scaling; bf16 (A100) does not.
         self.scaler = torch.amp.GradScaler("cuda", enabled=_needs_scaler)
@@ -162,14 +160,12 @@ class Quad_neuron():
         # per-batch host->device copy entirely.
         if self.optimizer is None:
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        self.model.train()
+        for _ in range(epochs):
 
-        for epoch in range(epochs):
-            self.model.train()
             # Accumulate on-device and only sync to the CPU once per epoch -
             # calling .item() inside the loop forces a CUDA sync every batch.
-            total = torch.zeros((), device=self.device)
-            correct = torch.zeros((), device=self.device)
-            loss_sum = torch.zeros((), device=self.device)
+
 
             # Keep batch shape constant on GPU so cudnn.benchmark doesn't have
             # to re-tune kernels for a one-off, smaller final batch each epoch.
@@ -184,12 +180,8 @@ class Quad_neuron():
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
 
-                loss_sum += loss.detach() * labels.size(0)
-                correct += (outputs.detach().argmax(1) == labels).sum()
-                total += labels.size(0)
 
-            print(f"Epoch {epoch+1}/{epochs} | "
-                f"Loss: {(loss_sum / total).item():.4f} | Acc: {(correct / total).item():.4f}")
+
 
         return None
 

@@ -312,9 +312,7 @@ class LoRA:
             p.numel() for p in self.model.parameters() if p.requires_grad
         )
         total_params = sum(p.numel() for p in self.model.parameters())
-        print(
-            f"Trainable parameters: {trainable_params:,} / {total_params:,} ({100*trainable_params/total_params:.2f}%)"
-        )
+
 
         if self.optimizer is None:
             self.optimizer = torch.optim.Adam(
@@ -346,10 +344,7 @@ class LoRA:
                 correct += (outputs.detach().argmax(1) == labels).sum()
                 total += labels.size(0)
 
-            print(
-                f"Epoch {epoch+1}/{epochs} | "
-                f"Loss: {(loss_sum / total).item():.4f} | Acc: {(correct / total).item():.4f}"
-            )
+
 
     def test(self, X, y):
         self.model.eval()  # disable dropout/batchnorm training behavior

@@ -281,7 +281,6 @@ if __name__ == "__main__":
     name_base = f"{args.model}_with_ReLU{args.ReLU}_arc_({arc_str})"
 
     save_dir = f"models/{name_base}"
-    print(save_dir)
     os.makedirs(save_dir, exist_ok=True)
 
     with open(f"{save_dir}/arguments.pkl", "wb") as f:
@@ -298,8 +297,8 @@ if __name__ == "__main__":
         load_if_exists=True,
         direction="maximize",
         pruner=optuna.pruners.MedianPruner(
-            n_startup_trials=10,   # complete 5 trials untouched before pruner activates
-            n_warmup_steps=25,     # within each trial, ignore the first 5 epoch reports
+            n_startup_trials=5,   
+            n_warmup_steps=15,     
         ),
     )
 
