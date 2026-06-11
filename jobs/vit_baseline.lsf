@@ -6,7 +6,7 @@
 #BSUB -e logs/ViT_baseline_%J.err
 #BSUB -B
 #BSUB -N
-#BSUB -u s234813@dtu.dk
+#BSUB -u s245809@dtu.dk
 #BSUB -n 1
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=64GB]"
@@ -19,6 +19,6 @@ echo "Running on node: $(hostname)"
 
 source .optuna/bin/activate
 
-python Train_Model.py --model ViT_baseline --epoch 200 --ReLU 0 --num_blocks 1 1 1 1 --batch_size 32
+python Train_Model.py --model ViT_baseline --epoch 20 --ReLU 0 --num_blocks 1 1 1 1 --batch_size 32
 
 echo "Job finished at $(date)"

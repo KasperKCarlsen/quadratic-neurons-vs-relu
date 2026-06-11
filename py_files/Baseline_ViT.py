@@ -121,9 +121,9 @@ class ViT_baseline:
 
         with torch.no_grad():
             for inputs, labels in loader:
+                inputs, labels = inputs.to(self.device), labels.to(self.device)
                 inputs_res = F.interpolate(inputs, size=(224, 224), mode='bilinear', align_corners=False)
-                outputs = self.model(pixel_values=inputs_re, labels.to(self.device)
-                outputs = self.model(pixel_values=inputs).logits
+                outputs = self.model(pixel_values=inputs_res).logits
                 _, predicted = torch.max(outputs, 1)
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
@@ -147,10 +147,10 @@ class ViT_baseline:
             self.model.train()
             total, correct, loss_sum = 0, 0, 0
             for images, labels in train_loader:
+                images, labels = images.to(self.device), labels.to(self.device)
                 images_res = F.interpolate(images, size=(224, 224), mode='bilinear', align_corners=False)
-                outputs = self.model(pixel_values=images_r), labels.to(self.device)
                 self.optimizer.zero_grad()
-                outputs = self.model(pixel_values=images).logits
+                outputs = self.model(pixel_values=images_res).logits
                 loss = criterion(outputs, labels)
                 loss.backward()
                 self.optimizer.step()
@@ -164,10 +164,10 @@ class ViT_baseline:
         self.model.eval()
         correct, total = 0, 0
         with torch.no_grad():
-            for inputs_res = F.interpolate(inputs, size=(224, 224), mode='bilinear', align_corners=False)
-                outputs = self.model(pixel_values=inputs_re
+            for inputs, labels in loader:
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
-                outputs = self.model(pixel_values=inputs).logits
+                inputs_res = F.interpolate(inputs, size=(224, 224), mode='bilinear', align_corners=False)
+                outputs = self.model(pixel_values=inputs_res).logits
                 correct += (outputs.argmax(1) == labels).sum().item()
                 total += labels.size(0)
         return 100 * correct / total

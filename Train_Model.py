@@ -116,7 +116,7 @@ def objective(trial, args, X_train, y_train, X_test, y_test):
     print(save_dir)
     os.makedirs(save_dir, exist_ok=True)
 
-    batch_size = trial.suggest_int("batch_size", 32, 512)
+    batch_size = trial.suggest_int("batch_size", 32, 64)
 
     for i in range(args.epoch):
         model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
@@ -202,7 +202,7 @@ if __name__ == "__main__":
 
     study.optimize(
         lambda trial: objective(trial, args, X_train, y_train, X_test, y_test),
-        n_trials=100,
+        n_trials=1,
     )
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
