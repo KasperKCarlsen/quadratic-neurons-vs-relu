@@ -2,6 +2,7 @@
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
 from transformers import ViTForImageClassification
 
@@ -95,7 +96,8 @@ class ViT_baseline:
                 images, labels = images.to(self.device), labels.to(self.device)
 
                 self.optimizer.zero_grad()
-                outputs = self.model(pixel_values=images).logits
+                images_res = F.interpolate(images, size=(224, 224), mode='bilinear', align_corners=False)
+                outputs = self.model(pixel_values=images_res).logits
                 loss = criterion(outputs, labels)
                 loss.backward()
                 self.optimizer.step()
@@ -119,7 +121,8 @@ class ViT_baseline:
 
         with torch.no_grad():
             for inputs, labels in loader:
-                inputs, labels = inputs.to(self.device), labels.to(self.device)
+                inputs_res = F.interpolate(inputs, size=(224, 224), mode='bilinear', align_corners=False)
+                outputs = self.model(pixel_values=inputs_re, labels.to(self.device)
                 outputs = self.model(pixel_values=inputs).logits
                 _, predicted = torch.max(outputs, 1)
                 total += labels.size(0)
@@ -144,7 +147,8 @@ class ViT_baseline:
             self.model.train()
             total, correct, loss_sum = 0, 0, 0
             for images, labels in train_loader:
-                images, labels = images.to(self.device), labels.to(self.device)
+                images_res = F.interpolate(images, size=(224, 224), mode='bilinear', align_corners=False)
+                outputs = self.model(pixel_values=images_r), labels.to(self.device)
                 self.optimizer.zero_grad()
                 outputs = self.model(pixel_values=images).logits
                 loss = criterion(outputs, labels)
@@ -160,7 +164,8 @@ class ViT_baseline:
         self.model.eval()
         correct, total = 0, 0
         with torch.no_grad():
-            for inputs, labels in loader:
+            for inputs_res = F.interpolate(inputs, size=(224, 224), mode='bilinear', align_corners=False)
+                outputs = self.model(pixel_values=inputs_re
                 inputs, labels = inputs.to(self.device), labels.to(self.device)
                 outputs = self.model(pixel_values=inputs).logits
                 correct += (outputs.argmax(1) == labels).sum().item()

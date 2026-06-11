@@ -15,6 +15,7 @@ import optuna
 from optuna.trial import TrialState
 
 from funcs import *
+from py_files.Baseline_ViT import ViT_baseline
 from py_files.Quad_Neuron import Quad_neuron
 from py_files.Quad_adapters import Quad_adapters
 from py_files.Baseline import Baseline
@@ -25,6 +26,7 @@ MODEL_MAP = {
     "Quad_adapters": Quad_adapters,
     "Baseline": Baseline,
     "LoRA": LoRA,
+    "ViT_baseline": ViT_baseline,
 }
 
 parser = argparse.ArgumentParser(description="Proper ResNets for CIFAR10 in PyTorch")
@@ -90,17 +92,19 @@ parser.add_argument(
 
 def objective(trial, args, X_train, y_train, X_test, y_test):
     model_class = MODEL_MAP[args.model]
-    if model_class is not Quad_adapters:
-        model = model_class(
-            args.ReLU, args.num_blocks, classes=args.classes, trial=trial
-        )
-    else:
+    if model_class is Quad_adapters:
         model = model_class(
             args.ReLU,
             args.num_blocks,
             args.load_path,
             classes=args.classes,
             trial=trial,
+        )
+    elif model_class is ViT_baseline:
+        model = model_class(classes=args.classes, trial=trial)
+    else:
+        model = model_class(
+            args.ReLU, args.num_blocks, classes=args.classes, trial=trial
         )
 
     if model_class is not Quad_adapters and args.load_path is not None:
