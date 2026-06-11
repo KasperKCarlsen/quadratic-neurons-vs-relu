@@ -9,9 +9,7 @@ import torchvision.transforms as transforms
 import pickle
 import numpy as np
 
-from funcs import load_checkpoint, iterate_batches
-
-#torchvision.datasets.CIFAR10(root='./data', download=True) #run once
+from funcs import load_checkpoint, iterate_batches, resolve_amp_dtype
 
 class LambdaLayer(nn.Module):
     def __init__(self, lambd):
@@ -122,7 +120,7 @@ class QResNet(nn.Module):
 
 class Quad_neuron():
 
-    def __init__(self, Relu, num_blocks, block=BasicBlock, classes=[0,1,2,3,4,5,6,7,8,9], trial=None):
+    def __init__(self, Relu, num_blocks, block=BasicBlock, classes=[0,1,2,3,4,5,6,7,8,9], trial=None, amp_dtype="bf16"):
         self.model = QResNet(Relu, block, num_blocks, classes)
         self.trial = trial
         if not torch.cuda.is_available():
@@ -130,8 +128,10 @@ class Quad_neuron():
         self.device = torch.device("cuda")
         # channels_last + bf16 autocast is the standard fast recipe for conv
         # nets on Tensor Core GPUs (A100); keep plain fp32/contiguous on CPU.
-        self.memory_format = torch.channels_last if self.device.type == "cuda" else torch.contiguous_format
-        self.use_amp = self.device.type == "cuda"
+        self.memory_format = torch.channels_last
+        self.use_amp, self.amp_dtype, _needs_scaler = resolve_amp_dtype(amp_dtype, self.device)
+        # fp16 (V100/Volta path) needs gradient scaling; bf16 (A100) does not.
+        self.scaler = torch.amp.GradScaler("cuda", enabled=_needs_scaler)
         self.model.to(self.device, memory_format=self.memory_format)
         self.fwd = self.model
         self.criterion = nn.CrossEntropyLoss()
@@ -160,14 +160,12 @@ class Quad_neuron():
         # per-batch host->device copy entirely.
         if self.optimizer is None:
             self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
+        self.model.train()
+        for _ in range(epochs):
 
-        for epoch in range(epochs):
-            self.model.train()
             # Accumulate on-device and only sync to the CPU once per epoch -
             # calling .item() inside the loop forces a CUDA sync every batch.
-            total = torch.zeros((), device=self.device)
-            correct = torch.zeros((), device=self.device)
-            loss_sum = torch.zeros((), device=self.device)
+
 
             # Keep batch shape constant on GPU so cudnn.benchmark doesn't have
             # to re-tune kernels for a one-off, smaller final batch each epoch.
@@ -175,18 +173,15 @@ class Quad_neuron():
                 images = images.to(memory_format=self.memory_format)
 
                 self.optimizer.zero_grad(set_to_none=True)
-                with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
+                with torch.autocast(device_type=self.device.type, dtype=self.amp_dtype, enabled=self.use_amp):
                     outputs = self.fwd(images)
                     loss = self.criterion(outputs, labels)
-                loss.backward()
-                self.optimizer.step()
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
 
-                loss_sum += loss.detach() * labels.size(0)
-                correct += (outputs.detach().argmax(1) == labels).sum()
-                total += labels.size(0)
 
-            print(f"Epoch {epoch+1}/{epochs} | "
-                f"Loss: {(loss_sum / total).item():.4f} | Acc: {(correct / total).item():.4f}")
+
 
         return None
 
@@ -198,7 +193,7 @@ class Quad_neuron():
         correct = torch.zeros((), device=self.device)
         total = torch.zeros((), device=self.device)
 
-        with torch.inference_mode(), torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
+        with torch.inference_mode(), torch.autocast(device_type=self.device.type, dtype=self.amp_dtype, enabled=self.use_amp):
             # No backward pass during eval, so memory pressure is far lower
             # than training - use a bigger batch (matches the upper end of
             # the trial's batch_size search space, which already has to fit

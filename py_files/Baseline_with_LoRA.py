@@ -11,7 +11,7 @@ import numpy as np
 import loralib as lora
 import math
 
-from funcs import load_checkpoint, iterate_batches
+from funcs import load_checkpoint, iterate_batches, resolve_amp_dtype
 
 
 class LambdaLayer(nn.Module):
@@ -226,6 +226,7 @@ class LoRA:
         block=BasicBlockLoRA,
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         trial=None,
+        amp_dtype="bf16",
         rank=4,
     ):
         self.model = QResNetLoRA(Relu, block, num_blocks, classes, rank=rank)
@@ -260,7 +261,9 @@ class LoRA:
         # channels_last + bf16 autocast is the standard fast recipe for conv
         # nets on Tensor Core GPUs (A100); keep plain fp32/contiguous on CPU.
         self.memory_format = torch.channels_last if self.device.type == "cuda" else torch.contiguous_format
-        self.use_amp = self.device.type == "cuda"
+        self.use_amp, self.amp_dtype, _needs_scaler = resolve_amp_dtype(amp_dtype, self.device)
+        # fp16 (V100/Volta path) needs gradient scaling; bf16 (A100) does not.
+        self.scaler = torch.amp.GradScaler("cuda", enabled=_needs_scaler)
         self.model.to(self.device, memory_format=self.memory_format)
         self.fwd = self.model
         self.criterion = nn.CrossEntropyLoss()
@@ -309,9 +312,7 @@ class LoRA:
             p.numel() for p in self.model.parameters() if p.requires_grad
         )
         total_params = sum(p.numel() for p in self.model.parameters())
-        print(
-            f"Trainable parameters: {trainable_params:,} / {total_params:,} ({100*trainable_params/total_params:.2f}%)"
-        )
+
 
         if self.optimizer is None:
             self.optimizer = torch.optim.Adam(
@@ -332,20 +333,18 @@ class LoRA:
                 images = images.to(memory_format=self.memory_format)
 
                 self.optimizer.zero_grad(set_to_none=True)
-                with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
+                with torch.autocast(device_type=self.device.type, dtype=self.amp_dtype, enabled=self.use_amp):
                     outputs = self.fwd(images)
                     loss = self.criterion(outputs, labels)
-                loss.backward()
-                self.optimizer.step()
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
 
                 loss_sum += loss.detach() * labels.size(0)
                 correct += (outputs.detach().argmax(1) == labels).sum()
                 total += labels.size(0)
 
-            print(
-                f"Epoch {epoch+1}/{epochs} | "
-                f"Loss: {(loss_sum / total).item():.4f} | Acc: {(correct / total).item():.4f}"
-            )
+
 
     def test(self, X, y):
         self.model.eval()  # disable dropout/batchnorm training behavior
@@ -353,7 +352,7 @@ class LoRA:
         correct = torch.zeros((), device=self.device)
         total = torch.zeros((), device=self.device)
 
-        with torch.inference_mode(), torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=self.use_amp):
+        with torch.inference_mode(), torch.autocast(device_type=self.device.type, dtype=self.amp_dtype, enabled=self.use_amp):
             # No backward pass during eval, so memory pressure is far lower
             # than training - use a bigger batch (matches the upper end of
             # the trial's batch_size search space, which already has to fit

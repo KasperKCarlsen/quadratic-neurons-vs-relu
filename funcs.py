@@ -79,3 +79,19 @@ def freeze_original_weights(model):
             param.requires_grad = True
         else:
             param.requires_grad = False
+
+
+def resolve_amp_dtype(amp_dtype, device):
+    """Map an --amp_dtype string to (use_amp, torch.dtype, needs_grad_scaler).
+
+    bf16 is the A100/Ampere fast path and needs no gradient scaler. V100/Volta
+    has no hardware bf16, so 'fp16' must be used there instead - and fp16's
+    narrow dynamic range means training wants a GradScaler to avoid gradient
+    underflow. 'off' disables autocast entirely (plain fp32).
+    """
+    if device.type != "cuda" or amp_dtype == "off":
+        return False, torch.float32, False
+    if amp_dtype == "fp16":
+        return True, torch.float16, True
+    # default / "bf16"
+    return True, torch.bfloat16, False
