@@ -10,7 +10,7 @@
 #BSUB -n 1
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=64GB]"
-#BSUB -W 48:00
+#BSUB -W 24:00
 
 cd ~/Fagprojekt
 
