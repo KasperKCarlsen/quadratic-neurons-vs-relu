@@ -26,12 +26,10 @@ MODEL_MAP = {
     "LoRA": LoRA,
 }
 
-parser = argparse.ArgumentParser(description="Proper ResNets for CIFAR10 in PyTorch")
-
+parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model", choices=list(MODEL_MAP.keys()), required=True, help="Model name"
 )
-
 parser.add_argument(
     "--ReLU",
     type=int,
@@ -39,18 +37,9 @@ parser.add_argument(
     required=True,
     help="0: no ReLU, 1: between layers only, 2: between layers and inside neurons",
 )
-
 parser.add_argument("--epoch", type=int, required=True)
-
-parser.add_argument(
-    "--save_epoch",
-    type=int,
-    default=1,
-    help="Save the model every x epochs if accuracy improves",
-)
-
+parser.add_argument("--prune_resulution", type=int, defult=3)
 parser.add_argument("--batch_size", type=int, default=128)
-
 parser.add_argument(
     "--val",
     dest="val",
@@ -58,12 +47,7 @@ parser.add_argument(
     default=True,
     help="Whether to use a validation split from the training data instead of the official test set",
 )
-
-
 parser.add_argument("--lr", type=float, default=1e-3)
-
-# Recommended CLI usage:
-# --num_blocks 3 3 3
 parser.add_argument(
     "--num_blocks",
     type=int,
@@ -71,22 +55,15 @@ parser.add_argument(
     required=True,
     help="Number of blocks per stage, e.g. --num_blocks 3 3 3",
 )
-
-# If you prefer this style instead:
-# --classes 0 1 2 3 4 5 6 7 8 9
 parser.add_argument("--classes", type=int, nargs="+", default=list(range(10)))
-
 parser.add_argument("--load_path", type=str, default=None)
-
 parser.add_argument(
     "--amp_dtype",
     choices=["bf16", "fp16", "off"],
     default="bf16",
     help="Autocast dtype. bf16 is the A100/Ampere default; use fp16 on V100/Volta (no hardware bf16) - fp16 enables a GradScaler automatically. 'off' disables autocast (fp32).",
 )
-
 parser.add_argument("--n_trials", type=int, required=False,default=100)
-
 parser.add_argument(
     "--test_split",
     dest="test_split",
@@ -94,8 +71,6 @@ parser.add_argument(
     default=0.2,
     help="Fraction of the loaded data to reserve for testing",
 )
-
-
 parser.add_argument(
     "--storage",
     choices=["sqlite", "journal"],
@@ -104,6 +79,7 @@ parser.add_argument(
     "workers sharing one study) on a networked/NFS filesystem, where SQLite file "
     "locking is unreliable.",
 )
+
 
 
 def build_storage(backend, name_base):
@@ -116,19 +92,9 @@ def build_storage(backend, name_base):
     """
     os.makedirs("optuna_databases", exist_ok=True)
     if backend == "journal":
-        try:  # optuna >= 4.x
-            from optuna.storages import JournalStorage
-            from optuna.storages.journal import JournalFileBackend
-            return JournalStorage(JournalFileBackend(f"optuna_databases/{name_base}.log"))
-        except ImportError:  # optuna 3.x
-            from optuna.storages import JournalStorage, JournalFileStorage
-            return JournalStorage(JournalFileStorage(f"optuna_databases/{name_base}.log"))
-    from optuna.storages import RDBStorage
-    # Bump the SQLite busy timeout so a brief lock doesn't fail the trial.
-    return RDBStorage(
-        url=f"sqlite:///optuna_databases/{name_base}_study.db",
-        engine_kwargs={"connect_args": {"timeout": 100}},
-    )
+        from optuna.storages import JournalStorage
+        from optuna.storages.journal import JournalFileBackend
+        return JournalStorage(JournalFileBackend(f"optuna_databases/{name_base}.log"))
 
 
 def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
@@ -141,40 +107,29 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     if model_class not in (LoRA, Quad_adapters) and args.load_path is not None:
         model.load(args.load_path)
 
-    # Per-trial output directory. Previously every trial wrote checkpoints and
-    # accuracies.pkl into the same save_dir, so trials (sequential OR parallel
-    # array workers) clobbered each other and the "best" file left on disk had
-    # nothing to do with study.best_trial. Scoping by trial.number keeps each
-    # trial's artifacts and makes them recoverable from the study DB.
+
     trial_dir = f"{save_dir}/trial{trial.number}"
     os.makedirs(trial_dir, exist_ok=True)
 
     best_acc = 0
     accs = {}
-
-    # Categorical powers-of-two: avoids tiny batches (e.g. 35) that starve the
-    # GPU, and limits shapes to 5 values so cudnn.benchmark tunes once per shape.
     batch_size = trial.suggest_categorical("batch_size", [64, 128, 256, 512, 1024])
 
     for i in range(args.epoch):
-        model.train(X_train, y_train, batch_size, args.lr, args.save_epoch)
+        model.train(X_train, y_train, batch_size, args.lr, args.prune_resolution)
+
+
 
         acc = model.test(X_test, y_test)
-        accs[i * args.save_epoch] = acc
+        accs[i * args.prune_resolution] = acc
 
         if acc > best_acc:
             best_acc = acc
-            model.save(f"{trial_dir}/epoch{i*args.save_epoch}")
+            model.save(f"{trial_dir}/epoch{i * args.prune_resolution}")
 
-        # Report to the pruner every 5 epochs instead of every epoch.
-        # Finer granularity wastes a full test-set eval just to get pruned
-        # one epoch earlier; every-5 still gives the pruner enough signal
-        # while cutting eval overhead by ~4x and reducing MPS inter-worker
-        # contention during the report/prune check.
-        if (i + 1) % 5 == 0:
-            trial.report(acc, i)
-            if trial.should_prune():
-                raise optuna.TrialPruned()
+        trial.report(acc, i)
+        if trial.should_prune():
+            raise optuna.TrialPruned()
 
     with open(f"{trial_dir}/accuracies.pkl", "wb") as f:
         pickle.dump(accs, f)
@@ -202,10 +157,7 @@ if __name__ == "__main__":
         X = np.concatenate(X)
         y = np.concatenate(y)
 
-        # Filter dataset to selected classes and remap labels to 0..C-1.
-        # A small lookup-table index replaces a 50k-iteration Python loop
-        # over a dict - both produce the same remapped array, but this one
-        # runs as a single vectorized numpy op.
+
         X, y = get_classes_dataset(args.classes, X, y)
         label_lookup = np.empty(10, dtype=np.int64)
         for new, orig in enumerate(args.classes):
@@ -215,7 +167,6 @@ if __name__ == "__main__":
         X = torch.from_numpy(X).float() / 255.0  # Normalize to [0, 1]
         y = torch.from_numpy(y).long()
 
-        # splitting up the dataset - AI used from here...
         dataset = TensorDataset(X, y)
         train_size = int(len(dataset) * (1 - args.test_split))
         test_size = len(dataset) - train_size
@@ -240,10 +191,7 @@ if __name__ == "__main__":
         X = np.concatenate(X)
         y = np.concatenate(y)
 
-        # Filter dataset to selected classes and remap labels to 0..C-1.
-        # A small lookup-table index replaces a 50k-iteration Python loop
-        # over a dict - both produce the same remapped array, but this one
-        # runs as a single vectorized numpy op.
+
         X, y = get_classes_dataset(args.classes, X, y)
         label_lookup = np.empty(10, dtype=np.int64)
         for new, orig in enumerate(args.classes):
@@ -258,26 +206,17 @@ if __name__ == "__main__":
         X_test = torch.from_numpy(images_test).float() / 255.0  # Normalize to [0, 1]
         y_test = torch.from_numpy(labels_test).long()
 
-    # CIFAR-10-scale tensors (well under 1 GB total) fit easily in a 4070
-    # Ti's 12 GB of VRAM. Move them to the training device once, up front,
-    # instead of copying a fresh batch from host memory on every iteration
-    # of every epoch of every Optuna trial - the model wrappers' train/test
-    # loops index batches directly out of these resident tensors.
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    device = torch.device("cuda")
     X_train = X_train.to(device)
     y_train = y_train.to(device)
     X_test = X_test.to(device)
     y_test = y_test.to(device)
 
-    # Create a directory for Optuna databases
     os.makedirs("optuna_databases", exist_ok=True)
 
-    # save_dir and the pickled args only depend on the (fixed) CLI arguments,
-    # not on anything Optuna suggests per trial - compute and write them once
-    # instead of redoing it on every single trial.
-    # Arc string used consistently in save_dir, storage filename, and study name
-    # so every (model, ReLU, architecture) combination is fully unambiguous.
-    arc_str = " ".join(str(b) for b in args.num_blocks)  # e.g. "18 18 18"
+
+    arc_str = "_".join(str(b) for b in args.num_blocks)  
     name_base = f"{args.model}_with_ReLU{args.ReLU}_arc_({arc_str})"
 
     save_dir = f"models/{name_base}"
@@ -298,7 +237,7 @@ if __name__ == "__main__":
         direction="maximize",
         pruner=optuna.pruners.MedianPruner(
             n_startup_trials=5,   
-            n_warmup_steps=15,     
+            n_warmup_steps=10,     
         ),
     )
 

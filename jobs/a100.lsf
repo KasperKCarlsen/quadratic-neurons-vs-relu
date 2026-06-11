@@ -44,10 +44,6 @@ LOAD_PATH_ARG=()
 [ -n "$LOAD_PATH" ] && LOAD_PATH_ARG=(--load_path "$LOAD_PATH")
 echo "Job ${LSB_JOBID:-?} started $(date) on $(hostname) | workers=${NUM_WORKERS}"
 # --- Environment -----------------------------------------------------
-# Unbuffer Python's stdout/stderr so each worker's output is written to its log
-# AS IT HAPPENS, not in big blocks at flush time. Without this the per-worker
-# files (and therefore the live `tail -F` below + `bpeek`) only update in bursts.
-export PYTHONUNBUFFERED=1
 # Split the granted cores across workers so the N processes don't oversubscribe
 # the CPU (N workers x all-cores each = thrash). Floor at 1.
 NPROC=${LSB_DJOB_NUMPROC:-12}
