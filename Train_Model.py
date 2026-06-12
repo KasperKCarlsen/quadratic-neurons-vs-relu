@@ -136,6 +136,9 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
 
     with open(f"{trial_dir}/accuracies.pkl", "wb") as f:
         pickle.dump(accs, f)
+    
+    trial.set_user_attr("best_acc", best_acc)
+    return best_acc
 
     # Return the best epoch (matches the checkpoint we keep) rather than the
     # last epoch. Revert to `return acc` if you want last-epoch se
