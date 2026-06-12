@@ -1,0 +1,9 @@
+{
+  "hpo_best_value": 83.44999694824219,
+  "params": {
+    "optimizer": "Adam",
+    "lr": 0.005425276390770299,
+    "batch_size": 88
+  },
+  "epochs": 200
+}

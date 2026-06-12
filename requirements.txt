@@ -6,3 +6,5 @@ torchvision
 optuna
 transformers
 tqdm
+matplotlib
+scikit-learn
