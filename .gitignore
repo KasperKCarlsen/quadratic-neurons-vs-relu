@@ -2,7 +2,7 @@ data/
 docs
 venv/
 models/
-.optuna/
+optuna/
 optuna_databases/
 __pycache__/
 .vscode/
