@@ -9,3 +9,5 @@ __pycache__/
 py_files/__pycache__/
 Run_number/
 logs/
+Visualization/
+Done_models/
