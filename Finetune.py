@@ -65,43 +65,48 @@ def load_run_args(save_dir):
     return None
 
 
-def prepare_data(classes, val, test_split, device):
-    """Replicates Train_Model.py's data pipeline for a given class set / split."""
+def prepare_data(classes, test_split, device):
+    """Build three disjoint sets:
+      - train : 80% of the official training batches (seed-42 split)
+      - val   : the remaining 20% (used ONLY as the HPO target in Train_Model.py)
+      - test  : the official test_batch, held out entirely from selection.
+    The train/val split mirrors Train_Model.py exactly (same seed 42 and
+    test_split), so final models train on the IDENTICAL data HPO used, while
+    being scored on a test set that played no part in hyperparameter selection.
+    """
     X, y = [], []
     for i in range(1, 6):
         images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
-        X.append(images)
-        y.append(labels)
-    X = np.concatenate(X)
-    y = np.concatenate(y)
-
+        X.append(images); y.append(labels)
+    X = np.concatenate(X); y = np.concatenate(y)
     X, y = get_classes_dataset(classes, X, y)
     label_lookup = np.empty(10, dtype=np.int64)
     for new, orig in enumerate(classes):
         label_lookup[orig] = new
     y = label_lookup[y]
 
-    if val:
-        X = torch.from_numpy(X).float() / 255.0
-        y = torch.from_numpy(y).long()
-        dataset = torch.utils.data.TensorDataset(X, y)
-        train_size = int(len(dataset) * (1 - test_split))
-        test_size = len(dataset) - train_size
-        train_ds, test_ds = torch.utils.data.random_split(
-            dataset, [train_size, test_size],
-            generator=torch.Generator().manual_seed(42),
-        )
-        X_train, y_train = X[train_ds.indices], y[train_ds.indices]
-        X_test, y_test = X[test_ds.indices], y[test_ds.indices]
-    else:
-        X_train = torch.from_numpy(X).float() / 255.0
-        y_train = torch.from_numpy(y).long()
-        images_test, labels_test = load_batch("data/cifar-10-batches-py/test_batch")
-        X_test = torch.from_numpy(images_test).float() / 255.0
-        y_test = torch.from_numpy(labels_test).long()
+    X = torch.from_numpy(X).float() / 255.0
+    y = torch.from_numpy(y).long()
+    dataset = torch.utils.data.TensorDataset(X, y)
+    train_size = int(len(dataset) * (1 - test_split))
+    val_size = len(dataset) - train_size
+    train_ds, val_ds = torch.utils.data.random_split(
+        dataset, [train_size, val_size],
+        generator=torch.Generator().manual_seed(42),
+    )
+    X_train, y_train = X[train_ds.indices], y[train_ds.indices]
+    X_val,   y_val   = X[val_ds.indices],   y[val_ds.indices]
+
+    # Official test set, same class filtering / relabeling.
+    images_test, labels_test = load_batch("data/cifar-10-batches-py/test_batch")
+    Xt, yt = get_classes_dataset(classes, images_test, labels_test)
+    yt = label_lookup[yt]
+    X_test = torch.from_numpy(Xt).float() / 255.0
+    y_test = torch.from_numpy(yt).long()
 
     return (X_train.to(device), y_train.to(device),
-            X_test.to(device), y_test.to(device))
+            X_val.to(device),   y_val.to(device),
+            X_test.to(device),  y_test.to(device))
 
 
 def build_optimizer(model, params):
@@ -229,15 +234,18 @@ def train_one(db_path, args, device):
     # Prepared once and reused for every seed. The split is fixed (seed 42 inside
     # prepare_data), so all seeds are scored on the IDENTICAL test set and the
     # spread reflects training randomness only, not a different test set.
-    X_train, y_train, X_test, y_test = prepare_data(classes, val, test_split, device)
-
+    X_train, y_train, X_val, y_val, X_test, y_test = prepare_data(classes, test_split, device)
+    if args.refit_full:
+        X_fit = torch.cat([X_train, X_val]); y_fit = torch.cat([y_train, y_val])
+    else:
+        X_fit, y_fit = X_train, y_train
     out_dir = f"Done_models/{model_name}_ReLU{relu}_arc_{num_blocks}"
     os.makedirs(out_dir, exist_ok=True)
 
     best_per_seed, accs_per_seed = {}, {}
     for seed in args.seeds:
         acc, accs = train_seed(model_class, relu, num_blocks, classes, best, batch_size,
-                               args.epochs, args.load_path, X_train, y_train, X_test, y_test,
+                               args.epochs, args.load_path, X_fit, y_fit, X_test, y_test,
                                seed, f"{out_dir}/seed{seed}")
         best_per_seed[seed] = acc
         accs_per_seed[seed] = accs
@@ -276,6 +284,9 @@ if __name__ == "__main__":
                         help="Pretrained checkpoint for adapter models (LoRA / Quad_adapters).")
     parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4],
                         help="Seeds to train across; results reported as mean +/- std.")
+    parser.add_argument("--refit-full", dest="refit_full", action="store_true",
+                        help="Refit final models on train+val (hyperparameters fixed) "
+                             "before evaluating on the official test set.")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
