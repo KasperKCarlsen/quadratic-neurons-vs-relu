@@ -1,7 +1,7 @@
 #!/bin/bash
 #     mkdir -p logs && bsub < submit_hpo_mps.lsf
-#BSUB -J Base_0_18
-#BSUB -q gpua100
+#BSUB -J Base_0_9
+#BSUB -q gpuv100
 #BSUB -gpu "num=1:mode=exclusive_process:mps=yes" 
 #BSUB -n 6                                     
 #BSUB -R "span[hosts=1]"
