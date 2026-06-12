@@ -4,7 +4,7 @@ Train_Model.py runs the *search*: every trial re-suggests optimizer/lr/batch_siz
 and trains a short, possibly-pruned model. This script does the *final* training:
 for each study in optuna_databases/, it reads `study.best_params`, rebuilds the
 model from a fresh random init with exactly those hyperparameters, trains it for
---epochs, and saves the best-on-test checkpoint to models/<config>/final.
+--epochs, and saves the best-on-test checkpoint to Done_models/<config>/.
 
 Usage (Windows GPU):
     python Finetune.py --epochs 100
@@ -150,7 +150,9 @@ def train_one(db_path, args, device):
         model = model_class(relu, num_blocks, args.load_path, classes=classes)
     model.optimizer = build_optimizer(model, best)
 
-    out_dir = f"{save_dir}/final"
+    # Final models go to a separate Done_models/ tree so they never mix with
+    # the per-trial HPO checkpoints under models/.
+    out_dir = f"Done_models/{model_name}_ReLU{relu}_arc_{num_blocks}"
     os.makedirs(out_dir, exist_ok=True)
     with open(f"{out_dir}/best_params.json", "w") as f:
         json.dump({"hpo_best_value": study.best_value, "params": best,
