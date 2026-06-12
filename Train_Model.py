@@ -113,6 +113,9 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
 
     best_acc = 0
     accs = {}
+
+    # Categorical powers-of-two: avoids tiny batches (e.g. 35) that starve the
+    # GPU, and limits shapes to 5 values so cudnn.benchmark tunes once per shape.
     batch_size = trial.suggest_categorical("batch_size", [64, 128, 256, 512, 1024])
 
     for i in range(args.epoch // args.prune_resolution):
@@ -135,11 +138,7 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
         pickle.dump(accs, f)
 
     # Return the best epoch (matches the checkpoint we keep) rather than the
-    # last epoch. Revert to `return acc` if you want last-epoch semantics.
-    trial.set_user_attr("best_acc", best_acc)
-    return best_acc
-
-
+    # last epoch. Revert to `return acc` if you want last-epoch se
 if __name__ == "__main__":
     args = parser.parse_args()
 
