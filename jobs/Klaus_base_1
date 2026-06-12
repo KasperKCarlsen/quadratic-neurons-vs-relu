@@ -1,7 +1,7 @@
 #!/bin/bash
 #     mkdir -p logs && bsub < submit_hpo_mps.lsf
 #BSUB -J Base_0_18
-#BSUB -q gpua100
+#BSUB -q gpuv100
 #BSUB -gpu "num=1:mode=exclusive_process:mps=yes" 
 #BSUB -n 6                                     
 #BSUB -R "span[hosts=1]"
@@ -22,7 +22,8 @@ RELU=0
 BLOCKS=(18 18 18)                
 EPOCHS=50
 TRIALS_PER_WORKER=8     
-AMP_DTYPE=bf16               # bf16 = A100/Ampere default. Set to fp16 for THIS cluster's gpuv100 queue (Volta has no hardware bf16); fp16 auto-enables a GradScaler. 'off' = fp32.
+# AMP_DTYPE=bf16               # bf16 = A100/Ampere default. Set to fp16 for THIS cluster's gpuv100 queue (Volta has no hardware bf16); fp16 auto-enables a GradScaler. 'off' = fp32.
+AMP_DTYPE=fp16               # bf16 = A100/Ampere default. Set to fp16 for THIS cluster's gpuv100 queue (Volta has no hardware bf16); fp16 auto-enables a GradScaler. 'off' = fp32.
 CLASSES=(0 1 2 3 4 5 6 7 8 9) 
 LOAD_PATH=""                
 # ---------------------------------------------------------------------
