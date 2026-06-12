@@ -38,7 +38,7 @@ parser.add_argument(
     help="0: no ReLU, 1: between layers only, 2: between layers and inside neurons",
 )
 parser.add_argument("--epoch", type=int, required=True)
-parser.add_argument("--prune_resulution", type=int, default=3)
+parser.add_argument("--prune_resolution", type=int, default=3)
 parser.add_argument("--batch_size", type=int, default=128)
 parser.add_argument(
     "--val",
@@ -115,7 +115,7 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     accs = {}
     batch_size = trial.suggest_categorical("batch_size", [64, 128, 256, 512, 1024])
 
-    for i in range(args.epoch):
+    for i in range(args.epoch // args.prune_resolution):
         model.train(X_train, y_train, batch_size, args.lr, args.prune_resolution)
 
 
