@@ -1,12 +1,12 @@
 #!/bin/bash
 #     mkdir -p logs && bsub < submit_hpo_mps.lsf
-#BSUB -J Base_1_9
+#BSUB -J Quad_1_9
 #BSUB -q gpua100
 #BSUB -gpu "num=1:mode=exclusive_process:mps=yes" 
-#BSUB -n 6                                     
+#BSUB -n 4                                     
 #BSUB -R "span[hosts=1]"
-#BSUB -R "rusage[mem=1GB]"                        
-#BSUB -W 12:00                                     
+#BSUB -R "rusage[mem=2GB]"                        
+#BSUB -W 4:00                                     
 #BSUB -B
 #BSUB -N
 #BSUB -u s234813@dtu.dk
@@ -17,7 +17,7 @@ cd ~/Fagprojekt
 mkdir -p logs optuna_databases
 # ---- experiment config (edit these) ---------------------------------
 NUM_WORKERS=3
-MODEL=Baseline
+MODEL=Quad_neuron
 RELU=1
 BLOCKS=(9 9 9)                
 EPOCHS=50
