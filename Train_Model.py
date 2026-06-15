@@ -65,7 +65,7 @@ parser.add_argument(
     default="bf16",
     help="Autocast dtype. bf16 is the A100/Ampere default; use fp16 on V100/Volta (no hardware bf16) - fp16 enables a GradScaler automatically. 'off' disables autocast (fp32).",
 )
-p.add_argument("--total_trials", type=int, required=True)
+parser.add_argument("--total_trials", type=int, required=True)
 parser.add_argument(
     "--test_split",
     dest="test_split",
