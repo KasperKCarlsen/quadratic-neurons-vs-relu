@@ -130,7 +130,7 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
 
         if acc > best_acc:
             best_acc = acc
-            model.save(f"{trial_dir}/epoch{i * args.prune_resolution}")
+            model.save(f"{trial_dir}/best_model")
 
         trial.report(acc, i)
         if trial.should_prune():
