@@ -14,7 +14,6 @@
 #BSUB -e ~//job.err my_script.sh
 set -euo pipefail
 cd ~/Fagprojekt
-source optuna/bin/activate
 mkdir -p logs optuna_databases
 # ---- experiment config (edit these) ---------------------------------
 NUM_WORKERS=3

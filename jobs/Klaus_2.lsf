@@ -14,12 +14,11 @@
 #BSUB -e ~//job.err my_script.sh
 set -euo pipefail
 cd ~/Fagprojekt
-source optuna/bin/activate
 mkdir -p logs optuna_databases
 # ---- experiment config (edit these) ---------------------------------
 NUM_WORKERS=3
 MODEL=Quad_neuron
-RELU=3
+RELU=0
 BLOCKS=(9 9 9)                
 EPOCHS=150
 TOTAL_TRIALS=20
