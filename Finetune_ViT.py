@@ -8,17 +8,13 @@ init with those hyperparameters, trains across --seeds, and reports mean +/- std
 Correct split discipline (built in, not retrofitted): the 20% split that
 Train_ViT.py optimized against is used ONLY during HPO. Final models train on the
 training portion (optionally train+val with --refit-full) and are evaluated on the
-official CIFAR-10 test_batch, which played no part in selection.
-
-Config discovery reads each study's models/<name_base>/arguments.pkl (written by
-Train_ViT.py) rather than parsing filenames, so the ViT switches (full,
-freeze_qv_linear, classes, test_split) are recovered reliably.
+official test set, which played no part in selection.
 
 Usage:
-    python Finetune_ViT.py --epochs 10
-    python Finetune_ViT.py --epochs 10 --seeds 0 1 2 3 4
-    python Finetune_ViT.py --epochs 10 --only ViT_quad_full1
-    python Finetune_ViT.py --epochs 10 --refit-full
+    python Finetune_ViT.py --epochs 10 --dataset cifar100
+    python Finetune_ViT.py --epochs 10 --dataset cifar100 --seeds 0 1 2 3 4
+    python Finetune_ViT.py --epochs 10 --dataset cifar100 --only cifar100_ViT_quad_full1
+    python Finetune_ViT.py --epochs 10 --dataset cifar100 --refit-full
 """
 
 import os
@@ -32,6 +28,7 @@ import torch
 import numpy as np
 import optuna
 
+from Train_ViT import DATASET_CONFIG
 from funcs import load_batch, get_classes_dataset
 from py_files.Baseline_ViT import ViT_baseline
 from py_files.Quad_ViT import Quad_adapters as ViT_quad
@@ -43,12 +40,17 @@ MODEL_MAP = {
 
 
 def parse_name_base(name_base):
-    """Recover (model_key, kwargs) from a ViT study name_base.
+    """Recover (model_key, kwargs) from a ViT study name_base (dataset prefix
+    stripped first).
         ViT_quad_full1        -> ("ViT_quad", {"full": True})
         ViT_quad_full0        -> ("ViT_quad", {"full": False})
         ViT_baseline          -> ("ViT_baseline", {"freeze_qv_linear": False})
         ViT_baseline_frozenqv -> ("ViT_baseline", {"freeze_qv_linear": True})
-    Falls back to arguments.pkl values where available (see load_run_args)."""
+    """
+    for pfx in ("cifar10_", "cifar100_"):
+        if name_base.startswith(pfx):
+            name_base = name_base[len(pfx):]
+            break
     if name_base.startswith("ViT_quad"):
         full = name_base.endswith("full1")
         return "ViT_quad", {"full": full}
@@ -68,42 +70,36 @@ def load_run_args(save_dir):
     return None
 
 
-def load_cifar_arrays(classes):
-    """Concatenate the 5 training batches, filter to `classes`, relabel to a
-    contiguous range. Returns float tensors in [0,1] and long labels (CPU)."""
+def prepare_data(classes, test_split, device, dataset):
+    """Three disjoint sets for the chosen dataset: train/val from the training
+    files via the seed-42 split (val = HPO target only), test from the official
+    test file (untouched during selection)."""
+    cfg = DATASET_CONFIG[dataset]
     X, y = [], []
-    for i in range(1, 6):
-        images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
+    for fname in cfg["train_files"]:
+        images, labels = load_batch(f"{cfg['dir']}/{fname}", label_key=cfg["label_key"])
         X.append(images); y.append(labels)
     X = np.concatenate(X); y = np.concatenate(y)
     X, y = get_classes_dataset(classes, X, y)
-    label_lookup = np.empty(10, dtype=np.int64)
+    label_lookup = np.empty(cfg["num_classes"], dtype=np.int64)
     for new, orig in enumerate(classes):
         label_lookup[orig] = new
     y = label_lookup[y]
     X = torch.from_numpy(X).float() / 255.0
     y = torch.from_numpy(y).long()
-    return X, y, label_lookup
 
-
-def prepare_data(classes, test_split, device):
-    """Three disjoint sets, matching Train_ViT.py's split exactly (seed 42):
-      train : (1 - test_split) of the training batches
-      val   : the remaining test_split fraction (HPO target only)
-      test  : the official test_batch, untouched during selection.
-    """
-    X, y, label_lookup = load_cifar_arrays(classes)
-    dataset = torch.utils.data.TensorDataset(X, y)
-    train_size = int(len(dataset) * (1 - test_split))
-    val_size = len(dataset) - train_size
+    dataset_t = torch.utils.data.TensorDataset(X, y)
+    train_size = int(len(dataset_t) * (1 - test_split))
+    val_size = len(dataset_t) - train_size
     train_ds, val_ds = torch.utils.data.random_split(
-        dataset, [train_size, val_size],
+        dataset_t, [train_size, val_size],
         generator=torch.Generator().manual_seed(42),
     )
     X_train, y_train = X[train_ds.indices], y[train_ds.indices]
     X_val,   y_val   = X[val_ds.indices],   y[val_ds.indices]
 
-    images_test, labels_test = load_batch("data/cifar-10-batches-py/test_batch")
+    images_test, labels_test = load_batch(f"{cfg['dir']}/{cfg['test_file']}",
+                                          label_key=cfg["label_key"])
     Xt, yt = get_classes_dataset(classes, images_test, labels_test)
     yt = label_lookup[yt]
     X_test = torch.from_numpy(Xt).float() / 255.0
@@ -195,13 +191,10 @@ def plot_seed_summary(config_name, accs_per_seed, mean_best, std_best):
     print(f"  [plot] wrote {out_path}")
 
 
-def discover_studies():
-    """Find ViT studies by their journal/sqlite files in optuna_databases/.
-    Matches both backends and strips the extension to get the name_base."""
-    paths = (glob.glob("optuna_databases/ViT_*.log")
-             + glob.glob("optuna_databases/ViT_*.db"))
-    name_bases = sorted({os.path.splitext(os.path.basename(p))[0] for p in paths})
-    return name_bases
+def discover_studies(dataset):
+    paths = (glob.glob(f"optuna_databases/{dataset}_ViT_*.log")
+             + glob.glob(f"optuna_databases/{dataset}_ViT_*.db"))
+    return sorted({os.path.splitext(os.path.basename(p))[0] for p in paths})
 
 
 def load_study(name_base):
@@ -230,7 +223,9 @@ def train_one(name_base, args, device):
 
     # Reuse this run's recorded settings where present; fall back to name-derived.
     run_args = load_run_args(save_dir)
-    classes = getattr(run_args, "classes", list(range(10)))
+    classes = getattr(run_args, "classes", None)
+    if classes is None:
+        classes = list(range(DATASET_CONFIG[args.dataset]["num_classes"]))
     test_split = getattr(run_args, "test_split", 0.2)
     grad_clip = getattr(run_args, "grad_clip", 1.0)
     kwargs = dict(name_kwargs)
@@ -244,7 +239,8 @@ def train_one(name_base, args, device):
     print(f"\n=== {name_base} ===")
     print(f"  best_value(HPO)={study.best_value:.4f}  params={best}")
 
-    X_train, y_train, X_val, y_val, X_test, y_test = prepare_data(classes, test_split, device)
+    X_train, y_train, X_val, y_val, X_test, y_test = prepare_data(
+        classes, test_split, device, args.dataset)
     if args.refit_full:
         X_fit = torch.cat([X_train, X_val]); y_fit = torch.cat([y_train, y_val])
     else:
@@ -271,6 +267,7 @@ def train_one(name_base, args, device):
         "epochs": args.epochs,
         "seeds": list(args.seeds),
         "refit_full": args.refit_full,
+        "dataset": args.dataset,
         "best_acc_per_seed": {str(s): best_per_seed[s] for s in args.seeds},
         "mean": mean,
         "std": std,
@@ -286,16 +283,21 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser(description="Final multi-seed ViT training.")
     p.add_argument("--epochs", type=int, required=True)
     p.add_argument("--only", type=str, default=None,
-                   help="Only train this study name_base, e.g. 'ViT_quad_full1'.")
+                   help="Only train this study name_base, e.g. 'cifar100_ViT_quad_full1' "
+                        "(the dataset prefix may be omitted).")
     p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
     p.add_argument("--refit-full", dest="refit_full", action="store_true",
                    help="Refit final models on train+val before the test-set eval.")
+    p.add_argument("--dataset", choices=["cifar10", "cifar100"], default="cifar10",
+                   help="Must match the dataset the studies were trained with.")
     args = p.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    name_bases = discover_studies()
+
+    name_bases = discover_studies(args.dataset)
     if args.only:
-        name_bases = [n for n in name_bases if n == args.only]
+        name_bases = [n for n in name_bases
+                      if n == args.only or n == f"{args.dataset}_{args.only}"]
         if not name_bases:
             raise SystemExit(f"No ViT study matching --only '{args.only}'")
     print(f"Found {len(name_bases)} ViT study(ies); training on {device}.")

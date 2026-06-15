@@ -20,16 +20,17 @@ def get_classes_dataset(classes, X, y):
 
 
 
-def load_batch(path):
+def load_batch(path, label_key=b'labels'):
+    """Load a CIFAR pickle. label_key selects the label field: b'labels' for
+    CIFAR-10, b'fine_labels' for CIFAR-100 (100 classes). reshape(-1, ...)
+    handles both the 10k-image CIFAR-10 batches and the 50k-image CIFAR-100
+    train file."""
     with open(path, 'rb') as f:
         batch = pickle.load(f, encoding='bytes')
-        
-    images = batch[b'data']      # (10000, 3072)
-    labels = batch[b'labels']    # length 10000
-
-    images = images.reshape(10000, 3, 32, 32)
+    images = batch[b'data']
+    labels = batch[label_key]
+    images = images.reshape(-1, 3, 32, 32)
     return images, np.array(labels)
-
 
 def freeze_original_weights(model):
     """Freeze original weights, only train LoRA parameters"""

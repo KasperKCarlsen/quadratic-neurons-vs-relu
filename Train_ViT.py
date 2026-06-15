@@ -12,6 +12,7 @@ and coarser pruning than the from-scratch CNN runs.
 Usage (single process):
     python Train_ViT.py --model ViT_quad --full --epoch 10 --n_trials 20
     python Train_ViT.py --model ViT_baseline --epoch 10 --n_trials 20
+    python Train_ViT.py --model ViT_quad --full --dataset cifar100 --epoch 10 --n_trials 20
 """
 
 import os
@@ -32,6 +33,20 @@ MODEL_MAP = {
     "ViT_quad": ViT_quad,
 }
 
+# Dataset configuration: the ONLY place the two datasets differ.
+DATASET_CONFIG = {
+    "cifar10":  {"dir": "data/cifar-10-batches-py",
+                 "train_files": [f"data_batch_{i}" for i in range(1, 6)],
+                 "test_file": "test_batch",
+                 "label_key": b"labels",
+                 "num_classes": 10},
+    "cifar100": {"dir": "data/cifar-100-python",
+                 "train_files": ["train"],
+                 "test_file": "test",
+                 "label_key": b"fine_labels",
+                 "num_classes": 100},
+}
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", choices=list(MODEL_MAP.keys()), required=True)
 parser.add_argument("--epoch", type=int, default=10,
@@ -50,12 +65,15 @@ parser.add_argument(
 parser.add_argument(
     "--grad_clip", type=float, default=1.0,
     help="Max gradient norm, applied to both ViT models (set <=0 to disable).")
-parser.add_argument("--classes", type=int, nargs="+", default=list(range(10)))
+parser.add_argument("--classes", type=int, nargs="+", default=None,
+                    help="Class subset. Defaults to all classes of the chosen dataset.")
 parser.add_argument("--n_trials", type=int, default=20)
 parser.add_argument(
     "--test_split", type=float, default=0.2,
     help="Fraction of the training data reserved as the HPO validation split.")
 parser.add_argument("--storage", choices=["sqlite", "journal"], default="journal")
+parser.add_argument("--dataset", choices=["cifar10", "cifar100"], default="cifar10",
+                    help="cifar10 (default) or cifar100. Only changes data loading.")
 
 
 def build_storage(backend, name_base):
@@ -70,14 +88,11 @@ def build_storage(backend, name_base):
 
 
 def build_name_base(args):
-    """ViT study/dir name. No ReLU/blocks; encode the meaningful ViT switches.
-        ViT_quad      -> ViT_quad_full1 / ViT_quad_full0
-        ViT_baseline  -> ViT_baseline   (+ _frozenqv if the ablation is on)
-    """
+    prefix = f"{args.dataset}_"
     if args.model == "ViT_quad":
-        return f"ViT_quad_full{int(args.full)}"
+        return f"{prefix}ViT_quad_full{int(args.full)}"
     suffix = "_frozenqv" if args.freeze_qv_linear else ""
-    return f"ViT_baseline{suffix}"
+    return f"{prefix}ViT_baseline{suffix}"
 
 
 def build_model(model_class, args, trial):
@@ -90,6 +105,25 @@ def build_model(model_class, args, trial):
     return model_class(classes=args.classes,
                        freeze_qv_linear=args.freeze_qv_linear,
                        grad_clip=gc, trial=trial)
+
+
+def load_cifar(classes, dataset):
+    """Load the training split of the chosen dataset, filter to `classes`, and
+    relabel to a contiguous range. Returns float tensors in [0,1] (CPU)."""
+    cfg = DATASET_CONFIG[dataset]
+    X, y = [], []
+    for fname in cfg["train_files"]:
+        images, labels = load_batch(f"{cfg['dir']}/{fname}", label_key=cfg["label_key"])
+        X.append(images); y.append(labels)
+    X = np.concatenate(X); y = np.concatenate(y)
+    X, y = get_classes_dataset(classes, X, y)
+    label_lookup = np.empty(cfg["num_classes"], dtype=np.int64)
+    for new, orig in enumerate(classes):
+        label_lookup[orig] = new
+    y = label_lookup[y]
+    X = torch.from_numpy(X).float() / 255.0
+    y = torch.from_numpy(y).long()
+    return X, y
 
 
 def objective(trial, args, save_dir, X_train, y_train, X_val, y_val):
@@ -121,31 +155,15 @@ def objective(trial, args, save_dir, X_train, y_train, X_val, y_val):
     return best_acc
 
 
-def load_cifar(classes):
-    """Same CIFAR pipeline as Train_Model.py. Tensors stay (N,3,32,32); the ViT
-    models resize to 224 internally, so no up-front resize here."""
-    X, y = [], []
-    for i in range(1, 6):
-        images, labels = load_batch(f"data/cifar-10-batches-py/data_batch_{i}")
-        X.append(images); y.append(labels)
-    X = np.concatenate(X); y = np.concatenate(y)
-    X, y = get_classes_dataset(classes, X, y)
-    label_lookup = np.empty(10, dtype=np.int64)
-    for new, orig in enumerate(classes):
-        label_lookup[orig] = new
-    y = label_lookup[y]
-    X = torch.from_numpy(X).float() / 255.0
-    y = torch.from_numpy(y).long()
-    return X, y
-
-
 if __name__ == "__main__":
     args = parser.parse_args()
+    if args.classes is None:
+        args.classes = list(range(DATASET_CONFIG[args.dataset]["num_classes"]))
 
-    # Load CIFAR and make the HPO train/val split. The official test_batch is NOT
+    # Load CIFAR and make the HPO train/val split. The official test set is NOT
     # touched here; final test-set evaluation happens in the ViT Finetune, so the
     # number HPO selects on (val) is never the number finally reported (test).
-    X, y = load_cifar(args.classes)
+    X, y = load_cifar(args.classes, args.dataset)
     dataset = torch.utils.data.TensorDataset(X, y)
     train_size = int(len(dataset) * (1 - args.test_split))
     val_size = len(dataset) - train_size
