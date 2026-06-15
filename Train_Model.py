@@ -132,7 +132,7 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
             best_acc = acc
             model.save(f"{trial_dir}/best_model")
 
-        trial.report(acc, i)
+        trial.report(acc, i * args.prune_resolution)
         if trial.should_prune():
             raise optuna.TrialPruned()
 
