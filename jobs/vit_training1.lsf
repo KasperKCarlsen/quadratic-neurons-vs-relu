@@ -9,7 +9,7 @@
 #BSUB -W 12:00
 #BSUB -B
 #BSUB -N
-#BSUB -u s234813@dtu.dk
+#BSUB -u s245146@dtu.dk
 #BSUB -o ~//logs/.out
 #BSUB -e ~//job.err my_script.sh
 set -euo pipefail
