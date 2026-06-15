@@ -35,7 +35,7 @@ parser.add_argument(
 parser.add_argument(
     "--ReLU",
     type=int,
-    choices=[0, 1, 2],
+    choices=[0, 1, 2, 3],
     required=True,
     help="0: no ReLU, 1: between layers only, 2: between layers and inside neurons",
 )
