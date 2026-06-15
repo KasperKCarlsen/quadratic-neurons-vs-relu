@@ -21,9 +21,10 @@ MODEL=ViT_quad            # ViT_quad | ViT_baseline
 FULL_ARG=--full           # --full (cross-term) | --no-full (reduced). ViT_quad only.
 FREEZE_ARG=               # set to --freeze_qv_linear for the matched-ablation baseline; else leave empty
 EPOCHS=10                 # ViT finetuning converges fast
-TRIALS_PER_WORKER=7
+TRIALS_PER_WORKER=5
 GRAD_CLIP=1.0
 CLASSES=(0 1 2 3 4 5 6 7 8 9)
+
 # ---------------------------------------------------------------------
 echo "Job ${LSB_JOBID:-?} started $(date) on $(hostname) | workers=${NUM_WORKERS} | model=${MODEL}"
 # --- Environment -----------------------------------------------------
@@ -32,6 +33,7 @@ THREADS=$(( NPROC / NUM_WORKERS ))
 [ "$THREADS" -lt 1 ] && THREADS=1
 export OMP_NUM_THREADS=$THREADS
 export MKL_NUM_THREADS=$THREADS
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True  
 # --- Launch workers --------------------------------------------------
 pids=()
 for i in $(seq 1 "$NUM_WORKERS"); do
