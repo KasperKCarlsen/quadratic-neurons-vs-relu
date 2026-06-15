@@ -26,9 +26,9 @@ class LambdaLayer(nn.Module):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, config, stride=1, option="A"):
+    def __init__(self, in_planes, planes, relu, stride=1, option="A"):
         super().__init__()
-        self.config = config
+        self.relu = relu
 
         self.conv1r = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
         init.kaiming_normal_(self.conv1r.weight)
@@ -49,13 +49,16 @@ class BasicBlock(nn.Module):
             )
 
     def forward(self, x):
+        relu = self.relu
+
 
         out = self.bn1(self.conv1r(x))
-        out = F.relu(out)
+        if relu == 2:
+            out = F.relu(out)
         out = self.bn2(self.conv2r(out))
         out += self.shortcut(x)
-        out = F.relu(out)
-
+        if relu in [1, 2]:
+            out = F.relu(out)
         return out
 
 

@@ -65,13 +65,13 @@ class BasicBlock(nn.Module):
 
         out = self.bn1(self.conv1r(x)*self.conv1g(x) + self.conv1b(x.pow(2)))
 
-        if relu == 2:
+        if relu == 3:
             out = F.relu(out)
 
         out = self.bn2(self.conv2r(out)*self.conv2g(out) + self.conv2b(out.pow(2)))
         out += self.shortcut(x)
 
-        if relu in [1, 2]:
+        if relu in [2, 3]:
             out = F.relu(out)
 
         return out
@@ -105,12 +105,15 @@ class QResNet(nn.Module):
     def forward(self, x):
         if self.relu == 0:
             out = self.bn1(self.conv1(x))
+            out = self.layer1(out)
+            out = self.layer2(out)
+            out = self.layer3(out)
         else:
             out = F.relu(self.bn1(self.conv1(x)))
+            out = F.relu(self.layer1(out))
+            out = F.relu(self.layer2(out))
+            out = F.relu(self.layer3(out))
 
-        out = self.layer1(out)
-        out = self.layer2(out)
-        out = self.layer3(out)
 
         out = F.avg_pool2d(out, out.size(3))
         out = out.view(out.size(0), -1)
@@ -139,7 +142,7 @@ class Quad_neuron():
         # Setup optimizer parameters once per trial if trial is provided
         if self.trial is not None:
             self.optimizer_name = self.trial.suggest_categorical("optimizer", ["Adam", "AdamW", "SGD"])
-            self.lr = self.trial.suggest_float("lr", 1e-6, 1e-2, log=True)
+            self.lr = self.trial.suggest_float("lr", 1e-7, 1, log=True)
             if self.optimizer_name == "AdamW":
                 self.weight_decay = self.trial.suggest_float("weight_decay", 1e-5, 1e-1, log=True)
                 self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay, fused=self.use_amp)

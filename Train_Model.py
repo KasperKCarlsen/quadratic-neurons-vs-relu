@@ -6,6 +6,8 @@ import numpy as np
 import argparse
 import optuna
 from optuna.trial import TrialState
+from optuna.study import MaxTrialsCallback
+from optuna.trial import TrialState
 
 from funcs import *
 from py_files.Quad_Neuron import Quad_neuron
@@ -63,7 +65,7 @@ parser.add_argument(
     default="bf16",
     help="Autocast dtype. bf16 is the A100/Ampere default; use fp16 on V100/Volta (no hardware bf16) - fp16 enables a GradScaler automatically. 'off' disables autocast (fp32).",
 )
-parser.add_argument("--n_trials", type=int, required=False,default=100)
+p.add_argument("--total_trials", type=int, required=True)
 parser.add_argument(
     "--test_split",
     dest="test_split",
@@ -239,13 +241,15 @@ if __name__ == "__main__":
         direction="maximize",
         pruner=optuna.pruners.MedianPruner(
             n_startup_trials=5,   
-            n_warmup_steps=10,     
+            n_warmup_steps=50,     
         ),
     )
 
     study.optimize(
         lambda trial: objective(trial, args, save_dir, X_train, y_train, X_test, y_test),
-        n_trials=args.n_trials,
+        n_trials=None,
+        callbacks=[MaxTrialsCallback(args.total_trials,states=(TrialState.COMPLETE, TrialState.PRUNED),
+    )],
     )
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
