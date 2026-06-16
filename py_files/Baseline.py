@@ -53,11 +53,11 @@ class BasicBlock(nn.Module):
 
 
         out = self.bn1(self.conv1r(x))
-        if relu == 2:
+        if relu == 3:
             out = F.relu(out)
         out = self.bn2(self.conv2r(out))
         out += self.shortcut(x)
-        if relu in [1, 2]:
+        if relu in [2, 3]:
             out = F.relu(out)
         return out
 
@@ -88,12 +88,17 @@ class QResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
-
-        out = self.layer1(out)
-        out = self.layer2(out)
-        out = self.layer3(out)
-
+        if self.relu == 0:
+            out = self.bn1(self.conv1(x))
+            out = self.layer1(out)
+            out = self.layer2(out)
+            out = self.layer3(out)
+        else:
+            out = F.relu(self.bn1(self.conv1(x)))
+            out = F.relu(self.layer1(out))
+            out = F.relu(self.layer2(out))
+            out = F.relu(self.layer3(out))
+    
         out = F.avg_pool2d(out, out.size(3))
         out = out.view(out.size(0), -1)
 
