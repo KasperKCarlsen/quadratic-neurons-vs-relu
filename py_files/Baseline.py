@@ -190,7 +190,7 @@ class Baseline:
 
 
 
-        return acc_train, loss_train
+        # return acc_train, loss_train
 
     def test(self, X, y):
         self.model.eval()  # disable dropout/batchnorm training behavior
