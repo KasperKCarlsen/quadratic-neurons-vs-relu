@@ -1,3 +1,5 @@
+import math
+import types
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -69,29 +71,92 @@ def quadratify(model, full=True):
     return n
 
 
+def _make_softmaxfree_forward(score_norm):
+    """Build a replacement forward() for HF ViTSelfAttention that skips softmax.
+
+    score_norm:
+        "none"    -> raw scores: weights = QK^T / sqrt(d_head), no normalization.
+        "l2"      -> each query's score row is L2-normalized over keys (a gating
+                     normalizer without the exponential).
+        "softmax" -> standard softmax (provided so the same module can run the
+                     unmodified baseline behavior if needed).
+    """
+    def forward(self, hidden_states, head_mask=None, output_attentions=False):
+        # Project to Q, K, V and split into heads. These mirror HF's
+        # transpose_for_scores, using the module's own head config.
+        def shape(x):
+            new_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
+            return x.view(*new_shape).permute(0, 2, 1, 3)
+
+        q = shape(self.query(hidden_states))
+        k = shape(self.key(hidden_states))
+        v = shape(self.value(hidden_states))
+
+        scores = torch.matmul(q, k.transpose(-1, -2)) / math.sqrt(self.attention_head_size)
+
+        if score_norm == "softmax":
+            weights = torch.softmax(scores, dim=-1)
+        elif score_norm == "l2":
+            # Row-wise L2 normalization over the key axis; eps avoids /0.
+            weights = scores / (scores.norm(dim=-1, keepdim=True) + 1e-6)
+        else:  # "none" -> raw, unnormalized scores
+            weights = scores
+
+        if head_mask is not None:
+            weights = weights * head_mask
+
+        context = torch.matmul(weights, v)
+        context = context.permute(0, 2, 1, 3).contiguous()
+        new_shape = context.size()[:-2] + (self.all_head_size,)
+        context = context.view(*new_shape)
+
+        return (context, weights) if output_attentions else (context, None)
+
+    return forward
+
+
+def desoftmax(model, score_norm="none"):
+    """Replace the forward() of every ViTSelfAttention module so it skips softmax
+    and uses `score_norm` instead. Patches in place; returns the count patched."""
+    n = 0
+    for module in model.modules():
+        # The self-attention module is the one holding query/key/value Linears.
+        if (hasattr(module, "query") and hasattr(module, "key")
+                and hasattr(module, "value")
+                and hasattr(module, "num_attention_heads")):
+            module.forward = types.MethodType(_make_softmaxfree_forward(score_norm), module)
+            n += 1
+    return n
+
+
 class Quad_adapters:
-    """Pretrained ViT with quadratic query/value projections (key stays linear).
-    The linear terms (r) are frozen at their pretrained values; the quadratic
-    terms (g, b) are trained, and the rest of the ViT is finetuned. Softmax
-    attention is retained. Gradient clipping is the stability measure, applied
-    identically to the ViT_baseline so the two share one training recipe."""
+    """Pretrained ViT with quadratic query/value projections (key stays linear),
+    and a softmax-free attention score normalization. The linear terms (r) are
+    frozen at their pretrained values; the quadratic terms (g, b) are trained, and
+    the rest of the ViT is finetuned. Gradient clipping is the stability measure.
+
+    score_norm: "none" (raw scores, no normalizer), "l2" (row-L2), or "softmax".
+    """
 
     def __init__(
         self,
         classes=[i for i in range(100)],
-        full=True,            # quadratic form: True = r*g + b(x^2), False = r + b(x^2)
-        grad_clip=1.0,        # max grad norm; None disables
+        full=True,
+        grad_clip=1.0,
+        score_norm="none",      # softmax-free by default, per supervisor's request
         model_name=MODEL_NAME,
         trial=None,
     ):
         self.classes = classes
         self.grad_clip = grad_clip
+        self.score_norm = score_norm
 
         self.model = ViTForImageClassification.from_pretrained(
             model_name, num_labels=len(classes), ignore_mismatched_sizes=True,
         )
 
         quadratify(self.model, full=full)
+        desoftmax(self.model, score_norm=score_norm)   # remove softmax from attention
 
         # Freeze the linear terms (r) of the quadratic Q/V projections; train the
         # quadratic terms (g, b) plus the rest of the network.
@@ -176,7 +241,7 @@ class Quad_adapters:
 
 
 if __name__ == "__main__":
-    qa = Quad_adapters(classes=list(range(100)), full=True)
+    qa = Quad_adapters(classes=list(range(100)), full=True, score_norm="none")
     X = torch.randn(8, 3, 32, 32)
     y = torch.randint(0, 10, (8,))
     qa.train(X, y, batch_size=4, lr=1e-3, epochs=1)
