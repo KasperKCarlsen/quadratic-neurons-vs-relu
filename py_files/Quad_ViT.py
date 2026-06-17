@@ -78,7 +78,7 @@ class Quad_adapters:
 
     def __init__(
         self,
-        classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        classes=[i for i in range(100)],
         full=True,            # quadratic form: True = r*g + b(x^2), False = r + b(x^2)
         grad_clip=1.0,        # max grad norm; None disables
         model_name=MODEL_NAME,
@@ -176,7 +176,7 @@ class Quad_adapters:
 
 
 if __name__ == "__main__":
-    qa = Quad_adapters(classes=list(range(10)), full=True)
+    qa = Quad_adapters(classes=list(range(100)), full=True)
     X = torch.randn(8, 3, 32, 32)
     y = torch.randint(0, 10, (8,))
     qa.train(X, y, batch_size=4, lr=1e-3, epochs=1)

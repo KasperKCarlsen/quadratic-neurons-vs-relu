@@ -22,7 +22,7 @@ class ViT_baseline:
 
     def __init__(
         self,
-        classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        classes=[i for i in range(100)],
         freeze_qv_linear=False,
         grad_clip=1.0,
         model_name=MODEL_NAME,
@@ -118,7 +118,7 @@ class ViT_baseline:
 
 
 if __name__ == "__main__":
-    vb = ViT_baseline(classes=list(range(10)))
+    vb = ViT_baseline(classes=list(range(100)))
     X = torch.randn(8, 3, 32, 32)  # CIFAR-sized; _resize handles upscaling
     y = torch.randint(0, 10, (8,))
     vb.train(X, y, batch_size=4, lr=1e-3, epochs=1)
