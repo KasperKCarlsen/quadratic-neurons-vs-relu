@@ -186,7 +186,6 @@ class Quad_neuron():
 
 
 
-        return acc_train, loss_train
 
 
 
