@@ -1,0 +1,8 @@
+[I 2026-06-17 10:03:31,283] A new study created in Journal with name: Quad_neuron_with_ReLU2_arc_(9_9_9)
+[I 2026-06-17 11:09:33,217] Trial 0 finished with value: 59.88999938964844 and parameters: {'optimizer': 'Adam', 'lr': 7.174124585705276e-07, 'batch_size': 128}. Best is trial 5 with value: 71.05000305175781.
+[I 2026-06-17 11:34:12,128] Trial 7 finished with value: 62.5099983215332 and parameters: {'optimizer': 'SGD', 'lr': 0.02380408751002062, 'momentum': 0.9258338831803175, 'batch_size': 512}. Best is trial 5 with value: 71.05000305175781.
+[I 2026-06-17 12:00:16,703] Trial 9 pruned. 
+[I 2026-06-17 12:10:17,915] Trial 11 pruned. 
+[I 2026-06-17 12:38:42,732] Trial 13 finished with value: 73.25 and parameters: {'optimizer': 'Adam', 'lr': 0.0011514912722001337, 'batch_size': 256}. Best is trial 3 with value: 78.41000366210938.
+[I 2026-06-17 13:07:03,094] Trial 15 finished with value: 76.0999984741211 and parameters: {'optimizer': 'Adam', 'lr': 0.0026029779084597252, 'batch_size': 256}. Best is trial 14 with value: 78.93000030517578.
+[I 2026-06-17 14:22:22,372] Trial 17 finished with value: 73.47000122070312 and parameters: {'optimizer': 'AdamW', 'lr': 4.250581394723043e-05, 'weight_decay': 0.06672079811540522, 'batch_size': 64}. Best is trial 14 with value: 78.93000030517578.
