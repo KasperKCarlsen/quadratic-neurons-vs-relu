@@ -1,0 +1,4 @@
+[I 2026-06-17 19:48:20,611] Using an existing study with name 'Quad_neuron_with_ReLU2_arc_(5_5_5)' instead of creating a new one.
+[I 2026-06-17 21:03:49,512] Trial 1 finished with value: 66.7699966430664 and parameters: {'optimizer': 'Adam', 'lr': 5.026996243083393e-05, 'batch_size': 512}. Best is trial 1 with value: 66.7699966430664.
+[I 2026-06-17 23:47:46,886] Trial 4 finished with value: 71.08999633789062 and parameters: {'optimizer': 'Adam', 'lr': 4.348946012342173e-05, 'batch_size': 128}. Best is trial 4 with value: 71.08999633789062.
+[I 2026-06-18 01:11:49,039] Trial 11 finished with value: 71.0 and parameters: {'optimizer': 'SGD', 'lr': 0.20284795805307232, 'momentum': 0.7444345360559422, 'batch_size': 128}. Best is trial 4 with value: 71.08999633789062.

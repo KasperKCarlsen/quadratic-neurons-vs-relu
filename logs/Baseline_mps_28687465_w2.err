@@ -1,0 +1,87 @@
+[I 2026-06-17 19:48:34,508] Using an existing study with name 'Baseline_with_ReLU2_arc_(18_18_18)' instead of creating a new one.
+[I 2026-06-17 20:37:56,867] Trial 1 finished with value: 49.56999969482422 and parameters: {'optimizer': 'Adam', 'lr': 2.289759679328696e-06, 'batch_size': 1024}. Best is trial 1 with value: 49.56999969482422.
+[I 2026-06-17 22:00:35,763] Trial 2 finished with value: 60.310001373291016 and parameters: {'optimizer': 'AdamW', 'lr': 6.095545341358617e-05, 'weight_decay': 0.0012121992501399768, 'batch_size': 512}. Best is trial 0 with value: 60.93000030517578.
+[W 2026-06-17 22:00:36,301] Trial 4 failed with parameters: {'optimizer': 'SGD', 'lr': 0.0018333965893328, 'momentum': 0.8371666428022962, 'batch_size': 1024} because of the following error: OutOfMemoryError('CUDA out of memory. Tried to allocate 32.00 MiB. GPU 0 has a total capacity of 15.77 GiB of which 26.25 MiB is free. Process 864785 has 36.00 MiB memory in use. Process 864747 has 9.80 GiB memory in use. Including non-PyTorch memory, this process has 5.90 GiB memory in use. Of the allocated memory 5.40 GiB is allocated by PyTorch, and 121.63 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)').
+Traceback (most recent call last):
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/optuna/study/_optimize.py", line 206, in _run_trial
+    value_or_values = func(trial)
+  File "/zhome/99/4/216796/Fagprojekt/Train_Model.py", line 257, in <lambda>
+    lambda trial: objective(trial, args, save_dir, X_train, y_train, X_test, y_test),
+  File "/zhome/99/4/216796/Fagprojekt/Train_Model.py", line 132, in objective
+    model.train(X_train, y_train, batch_size, args.lr, args.prune_resolution)
+  File "/zhome/99/4/216796/Fagprojekt/py_files/Baseline.py", line 181, in train
+    outputs = self.fwd(images)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/Fagprojekt/py_files/Baseline.py", line 99, in forward
+    out = F.relu(self.layer2(out))
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/container.py", line 244, in forward
+    input = module(input)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/Fagprojekt/py_files/Baseline.py", line 58, in forward
+    out = self.bn2(self.conv2r(out))
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/batchnorm.py", line 193, in forward
+    return F.batch_norm(
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/functional.py", line 2817, in batch_norm
+    return torch.batch_norm(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 32.00 MiB. GPU 0 has a total capacity of 15.77 GiB of which 26.25 MiB is free. Process 864785 has 36.00 MiB memory in use. Process 864747 has 9.80 GiB memory in use. Including non-PyTorch memory, this process has 5.90 GiB memory in use. Of the allocated memory 5.40 GiB is allocated by PyTorch, and 121.63 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[W 2026-06-17 22:00:36,359] Trial 4 failed with value None.
+Traceback (most recent call last):
+  File "/zhome/99/4/216796/Fagprojekt/Train_Model.py", line 256, in <module>
+    study.optimize(
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/optuna/study/study.py", line 516, in optimize
+    _optimize(
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/optuna/study/_optimize.py", line 68, in _optimize
+    _optimize_sequential(
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/optuna/study/_optimize.py", line 165, in _optimize_sequential
+    frozen_trial_id = _run_trial(study, func, catch)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/optuna/study/_optimize.py", line 263, in _run_trial
+    raise func_err
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/optuna/study/_optimize.py", line 206, in _run_trial
+    value_or_values = func(trial)
+  File "/zhome/99/4/216796/Fagprojekt/Train_Model.py", line 257, in <lambda>
+    lambda trial: objective(trial, args, save_dir, X_train, y_train, X_test, y_test),
+  File "/zhome/99/4/216796/Fagprojekt/Train_Model.py", line 132, in objective
+    model.train(X_train, y_train, batch_size, args.lr, args.prune_resolution)
+  File "/zhome/99/4/216796/Fagprojekt/py_files/Baseline.py", line 181, in train
+    outputs = self.fwd(images)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/Fagprojekt/py_files/Baseline.py", line 99, in forward
+    out = F.relu(self.layer2(out))
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/container.py", line 244, in forward
+    input = module(input)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/Fagprojekt/py_files/Baseline.py", line 58, in forward
+    out = self.bn2(self.conv2r(out))
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/batchnorm.py", line 193, in forward
+    return F.batch_norm(
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/functional.py", line 2817, in batch_norm
+    return torch.batch_norm(
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 32.00 MiB. GPU 0 has a total capacity of 15.77 GiB of which 26.25 MiB is free. Process 864785 has 36.00 MiB memory in use. Process 864747 has 9.80 GiB memory in use. Including non-PyTorch memory, this process has 5.90 GiB memory in use. Of the allocated memory 5.40 GiB is allocated by PyTorch, and 121.63 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

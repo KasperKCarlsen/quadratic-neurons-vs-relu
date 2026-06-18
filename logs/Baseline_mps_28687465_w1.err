@@ -1,0 +1,18 @@
+[I 2026-06-17 19:48:25,869] A new study created in Journal with name: Baseline_with_ReLU2_arc_(18_18_18)
+[I 2026-06-17 21:11:38,862] Trial 0 finished with value: 60.93000030517578 and parameters: {'optimizer': 'Adam', 'lr': 7.747885823966495e-06, 'batch_size': 512}. Best is trial 0 with value: 60.93000030517578.
+[I 2026-06-17 22:02:55,679] Trial 3 finished with value: 59.099998474121094 and parameters: {'optimizer': 'Adam', 'lr': 2.3622792403293225e-05, 'batch_size': 1024}. Best is trial 0 with value: 60.93000030517578.
+[I 2026-06-17 22:40:02,097] Trial 5 finished with value: 75.12999725341797 and parameters: {'optimizer': 'AdamW', 'lr': 0.0004773679653621158, 'weight_decay': 0.0002147628360270433, 'batch_size': 512}. Best is trial 5 with value: 75.12999725341797.
+[I 2026-06-17 23:19:04,183] Trial 6 finished with value: 73.63999938964844 and parameters: {'optimizer': 'SGD', 'lr': 0.009716016031743683, 'momentum': 0.6536146535996064, 'batch_size': 128}. Best is trial 5 with value: 75.12999725341797.
+[I 2026-06-18 00:12:12,597] Trial 7 finished with value: 62.06999969482422 and parameters: {'optimizer': 'Adam', 'lr': 3.286638063565195e-05, 'batch_size': 128}. Best is trial 5 with value: 75.12999725341797.
+[I 2026-06-18 00:25:23,178] Trial 8 pruned. 
+[I 2026-06-18 00:47:15,250] Trial 9 pruned. 
+[I 2026-06-18 02:34:57,372] Trial 10 finished with value: 81.86000061035156 and parameters: {'optimizer': 'Adam', 'lr': 0.0012068918282980067, 'batch_size': 64}. Best is trial 10 with value: 81.86000061035156.
+[I 2026-06-18 03:49:22,426] Trial 11 finished with value: 79.61000061035156 and parameters: {'optimizer': 'SGD', 'lr': 0.005123478926215846, 'momentum': 0.9560503730446759, 'batch_size': 64}. Best is trial 10 with value: 81.86000061035156.
+[I 2026-06-18 05:03:50,235] Trial 12 finished with value: 79.43000030517578 and parameters: {'optimizer': 'SGD', 'lr': 0.0045639969167372355, 'momentum': 0.98541010663687, 'batch_size': 64}. Best is trial 10 with value: 81.86000061035156.
+[I 2026-06-18 06:18:17,201] Trial 13 finished with value: 78.87999725341797 and parameters: {'optimizer': 'SGD', 'lr': 0.0011780517716942075, 'momentum': 0.979470381560222, 'batch_size': 64}. Best is trial 10 with value: 81.86000061035156.
+[I 2026-06-18 06:45:07,862] Trial 14 pruned. 
+[I 2026-06-18 07:11:55,539] Trial 15 pruned. 
+[I 2026-06-18 07:55:02,388] Trial 16 pruned. 
+[I 2026-06-18 08:07:45,947] Trial 17 pruned. 
+[I 2026-06-18 09:55:41,304] Trial 18 finished with value: 82.26000213623047 and parameters: {'optimizer': 'Adam', 'lr': 0.00880638113793306, 'batch_size': 64}. Best is trial 18 with value: 82.26000213623047.
+[I 2026-06-18 10:34:29,722] Trial 19 pruned. 

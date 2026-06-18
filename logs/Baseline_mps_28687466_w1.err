@@ -1,0 +1,10 @@
+[I 2026-06-17 19:49:05,354] A new study created in Journal with name: Baseline_with_ReLU2_arc_(9_9_9)
+[I 2026-06-17 20:29:12,410] Trial 0 finished with value: 55.22999954223633 and parameters: {'optimizer': 'SGD', 'lr': 9.734011088720103e-05, 'momentum': 0.8403047632352094, 'batch_size': 256}. Best is trial 0 with value: 55.22999954223633.
+[I 2026-06-17 20:51:11,958] Trial 4 finished with value: 22.100000381469727 and parameters: {'optimizer': 'SGD', 'lr': 1.1799844207067608e-05, 'momentum': 0.7743742199855363, 'batch_size': 1024}. Best is trial 0 with value: 55.22999954223633.
+[I 2026-06-17 22:32:18,549] Trial 5 finished with value: 66.2300033569336 and parameters: {'optimizer': 'Adam', 'lr': 5.053769239010546e-05, 'batch_size': 128}. Best is trial 1 with value: 67.47000122070312.
+[I 2026-06-18 00:05:58,164] Trial 10 finished with value: 81.44000244140625 and parameters: {'optimizer': 'AdamW', 'lr': 0.007631270923172057, 'weight_decay': 1.737181172059051e-05, 'batch_size': 128}. Best is trial 2 with value: 81.4800033569336.
+[I 2026-06-18 02:26:37,473] Trial 14 finished with value: 81.7699966430664 and parameters: {'optimizer': 'AdamW', 'lr': 0.008581106912480796, 'weight_decay': 2.2899914819665857e-05, 'batch_size': 64}. Best is trial 13 with value: 81.95999908447266.
+[I 2026-06-18 05:04:27,404] Trial 18 finished with value: 82.11000061035156 and parameters: {'optimizer': 'AdamW', 'lr': 0.008647891903622659, 'weight_decay': 1.2743592454465239e-05, 'batch_size': 64}. Best is trial 17 with value: 82.13999938964844.
+[I 2026-06-18 07:28:07,087] Trial 25 finished with value: 81.43000030517578 and parameters: {'optimizer': 'Adam', 'lr': 0.0028604676527972297, 'batch_size': 64}. Best is trial 17 with value: 82.13999938964844.
+[I 2026-06-18 07:44:58,077] Trial 30 pruned. 
+[I 2026-06-18 10:01:13,360] Trial 31 finished with value: 81.69999694824219 and parameters: {'optimizer': 'Adam', 'lr': 0.004706152689262164, 'batch_size': 64}. Best is trial 17 with value: 82.13999938964844.

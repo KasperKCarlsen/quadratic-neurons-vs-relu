@@ -1,0 +1,8 @@
+[I 2026-06-17 19:48:30,417] Using an existing study with name 'Quad_neuron_with_ReLU2_arc_(5_5_5)' instead of creating a new one.
+[I 2026-06-17 20:28:03,004] Trial 2 finished with value: 65.43000030517578 and parameters: {'optimizer': 'SGD', 'lr': 1.0933684550079694e-05, 'momentum': 0.9731020765906273, 'batch_size': 1024}. Best is trial 2 with value: 65.43000030517578.
+[I 2026-06-17 21:28:53,745] Trial 3 finished with value: 66.54000091552734 and parameters: {'optimizer': 'SGD', 'lr': 1.7467848236533748e-05, 'momentum': 0.9475613262314904, 'batch_size': 256}. Best is trial 1 with value: 66.7699966430664.
+[I 2026-06-17 22:16:42,035] Trial 5 finished with value: 67.1500015258789 and parameters: {'optimizer': 'Adam', 'lr': 0.08329392748235301, 'batch_size': 512}. Best is trial 5 with value: 67.1500015258789.
+[I 2026-06-17 23:07:42,360] Trial 6 finished with value: 67.77999877929688 and parameters: {'optimizer': 'SGD', 'lr': 0.0001709395098785115, 'momentum': 0.8410668799119865, 'batch_size': 256}. Best is trial 6 with value: 67.77999877929688.
+[I 2026-06-17 23:22:39,513] Trial 7 pruned. 
+[I 2026-06-17 23:44:51,011] Trial 9 pruned. 
+[I 2026-06-18 01:19:12,094] Trial 10 finished with value: 67.51000213623047 and parameters: {'optimizer': 'SGD', 'lr': 0.00018423023289763804, 'momentum': 0.5125234789345411, 'batch_size': 128}. Best is trial 4 with value: 71.08999633789062.

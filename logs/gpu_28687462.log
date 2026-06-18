@@ -1,0 +1,2 @@
+timestamp,gpu_util_%,mem_util_%,mem_used_MiB,mem_total_MiB,power_W
+2026/06/17 19:38:15.532, 0, 0, 3110, 16384, 38.74

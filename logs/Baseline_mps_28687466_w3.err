@@ -1,0 +1,12 @@
+[I 2026-06-17 19:49:23,208] Using an existing study with name 'Baseline_with_ReLU2_arc_(9_9_9)' instead of creating a new one.
+[I 2026-06-17 23:14:52,615] Trial 2 finished with value: 81.4800033569336 and parameters: {'optimizer': 'Adam', 'lr': 0.0011793917348388767, 'batch_size': 64}. Best is trial 2 with value: 81.4800033569336.
+[I 2026-06-17 23:47:46,343] Trial 12 finished with value: 63.97999954223633 and parameters: {'optimizer': 'Adam', 'lr': 0.0001324191005862857, 'batch_size': 512}. Best is trial 2 with value: 81.4800033569336.
+[I 2026-06-18 01:55:05,377] Trial 13 finished with value: 81.95999908447266 and parameters: {'optimizer': 'Adam', 'lr': 0.009785791351492663, 'batch_size': 64}. Best is trial 13 with value: 81.95999908447266.
+[I 2026-06-18 04:17:53,319] Trial 17 finished with value: 82.13999938964844 and parameters: {'optimizer': 'Adam', 'lr': 0.00826660799972535, 'batch_size': 64}. Best is trial 17 with value: 82.13999938964844.
+[I 2026-06-18 06:23:27,825] Trial 24 finished with value: 81.4800033569336 and parameters: {'optimizer': 'Adam', 'lr': 0.002959520357669417, 'batch_size': 64}. Best is trial 17 with value: 82.13999938964844.
+[I 2026-06-18 06:42:40,446] Trial 28 pruned. 
+[I 2026-06-18 08:54:19,602] Trial 29 finished with value: 81.88999938964844 and parameters: {'optimizer': 'Adam', 'lr': 0.0011864948218083397, 'batch_size': 64}. Best is trial 17 with value: 82.13999938964844.
+[I 2026-06-18 10:59:40,546] Trial 35 finished with value: 82.7699966430664 and parameters: {'optimizer': 'Adam', 'lr': 0.0052240969254233344, 'batch_size': 64}. Best is trial 35 with value: 82.7699966430664.
+[I 2026-06-18 11:24:17,985] Trial 39 pruned. 
+[I 2026-06-18 11:32:43,832] Trial 40 pruned. 
+[I 2026-06-18 11:44:10,463] Trial 41 pruned. 
