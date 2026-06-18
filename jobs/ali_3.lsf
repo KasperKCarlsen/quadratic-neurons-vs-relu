@@ -18,7 +18,7 @@ mkdir -p logs optuna_databases
 # ---- experiment config (edit these) ---------------------------------
 NUM_WORKERS=3
 MODEL=Quad_neuron
-RELU=3
+RELU=1
 BLOCKS=(5 5 5)                
 EPOCHS=150
 TOTAL_TRIALS=20
