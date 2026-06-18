@@ -1,12 +1,12 @@
 #!/bin/bash
 #     mkdir -p logs && bsub < submit_hpo_mps.lsf
 #BSUB -J quad_mps
-#BSUB -q gpuv100
+#BSUB -q gpua100
 #BSUB -gpu "num=1:mode=exclusive_process:mps=yes" 
 #BSUB -n 4                                     
 #BSUB -R "span[hosts=1]"
 #BSUB -R "rusage[mem=3GB]"                        
-#BSUB -W 10:00                                     
+#BSUB -W 8:00                                     
 #BSUB -B
 #BSUB -N
 #BSUB -u s234813@dtu.dk
@@ -19,10 +19,10 @@ mkdir -p logs optuna_databases
 NUM_WORKERS=3
 MODEL=Quad_neuron
 RELU=0
-BLOCKS=(9 9 9)                
+BLOCKS=(5 5 5)                
 EPOCHS=150
 TOTAL_TRIALS=25
-AMP_DTYPE=off               # bf16 = A100/Ampere default. Set to fp16 for THIS cluster's gpuv100 queue (Volta has no hardware bf16); fp16 auto-enables a GradScaler. 'off' = fp32.
+AMP_DTYPE=bf16               # bf16 = A100/Ampere default. Set to fp16 for THIS cluster's gpuv100 queue (Volta has no hardware bf16); fp16 auto-enables a GradScaler. 'off' = fp32.
 CLASSES=(0 1 2 3 4 5 6 7 8 9) 
 LOAD_PATH=""                
 # ---------------------------------------------------------------------

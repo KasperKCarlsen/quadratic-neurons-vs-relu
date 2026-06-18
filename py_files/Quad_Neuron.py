@@ -140,28 +140,23 @@ class Quad_neuron():
         self.criterion = nn.CrossEntropyLoss()
 
         # Setup optimizer parameters once per trial if trial is provided
-        if self.trial is not None:
-            self.optimizer_name = self.trial.suggest_categorical("optimizer", ["Adam","SGD"])
-            self.lr = self.trial.suggest_float("lr", 1e-5, 1, log=True)          # gamma_r (linear/r branch)
+        self.optimizer_name = self.trial.suggest_categorical("optimizer", ["Adam","SGD"])
+        self.lr = self.trial.suggest_float("lr", 1e-5, 1, log=True)          # gamma_r (linear/r branch)
 
-            self.relinear_ratio_b = self.trial.suggest_float("relinear_ratio_b", 1e-5, 1.0, log=True)
-            self.relinear_ratio_g = self.trial.suggest_float("relinear_ratio_g", 1e-5, 1.0, log=True)
+        self.relinear_ratio_b = self.trial.suggest_float("relinear_ratio_b", 1e-5, 1.0, log=True)
+        self.relinear_ratio_g = self.trial.suggest_float("relinear_ratio_g", 1e-5, 1.0, log=True)
 
-            gamma_r = self.lr
-            gamma_g = self.lr * self.relinear_ratio_g 
-            gamma_b = self.lr * self.relinear_ratio_b 
-            param_groups = self._relinear_param_groups(gamma_r, gamma_g, gamma_b)
+        gamma_r = self.lr
+        gamma_g = self.lr * self.relinear_ratio_g 
+        gamma_b = self.lr * self.relinear_ratio_b 
+        param_groups = self._relinear_param_groups(gamma_r, gamma_g, gamma_b)
 
-            if self.optimizer_name == "SGD":
-                self.momentum = self.trial.suggest_float("momentum", 0.5, 0.99)
-                self.optimizer = torch.optim.SGD(param_groups, lr=gamma_r, momentum=self.momentum)
-            else:
-                self.optimizer = torch.optim.Adam(param_groups, lr=gamma_r, fused=self.use_amp)
+        if self.optimizer_name == "SGD":
+            self.momentum = self.trial.suggest_float("momentum", 0.5, 0.99)
+            self.optimizer = torch.optim.SGD(param_groups, lr=gamma_r, momentum=self.momentum)
         else:
-            self.optimizer_name = "Adam"
-            self.lr = 1e-3
-            self.relinear_ratio = 1e-2  # default gamma_g/gamma_r when no trial drives the search
-            self.optimizer = None       # built in train() using the lr passed there
+            self.optimizer = torch.optim.Adam(param_groups, lr=gamma_r, fused=self.use_amp)
+
 
     def _relinear_param_groups(self, gamma_r, gamma_g, gamma_b):
 
