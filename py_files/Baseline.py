@@ -53,11 +53,11 @@ class BasicBlock(nn.Module):
 
 
         out = self.bn1(self.conv1r(x))
-        if relu == 3:
+        if relu == 2:
             out = F.relu(out)
         out = self.bn2(self.conv2r(out))
         out += self.shortcut(x)
-        if relu in [2, 3]:
+        if relu == 2:
             out = F.relu(out)
         return out
 
@@ -133,17 +133,11 @@ class Baseline:
 
         if self.trial is not None:
             self.optimizer_name = self.trial.suggest_categorical(
-                "optimizer", ["Adam", "AdamW", "SGD"]
+                "optimizer", ["Adam", "SGD"]
             )
-            self.lr = self.trial.suggest_float("lr", 1e-6, 1e-2, log=True)
-            if self.optimizer_name == "AdamW":
-                self.weight_decay = self.trial.suggest_float(
-                    "weight_decay", 1e-5, 1e-1, log=True
-                )
-                self.optimizer = torch.optim.AdamW(
-                    self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay, fused=self.use_amp
-                )
-            elif self.optimizer_name == "SGD":
+            self.lr = self.trial.suggest_float("lr", 1e-6, 1, log=True)
+
+            if self.optimizer_name == "SGD":
                 self.momentum = self.trial.suggest_float("momentum", 0.5, 0.99)
                 self.optimizer = torch.optim.SGD(
                     self.model.parameters(), lr=self.lr, momentum=self.momentum
@@ -160,9 +154,6 @@ class Baseline:
         # Train_Model.py) - iterate_batches indexes batches straight out of
         # them, skipping DataLoader/TensorDataset collation, pinning and the
         # per-batch host->device copy entirely.
-        if self.optimizer is None:
-            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
-
         for epoch in range(epochs):
             self.model.train()
             # Accumulate on-device and only sync to the CPU once per epoch -
