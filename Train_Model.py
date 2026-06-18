@@ -35,7 +35,7 @@ parser.add_argument(
 parser.add_argument(
     "--ReLU",
     type=int,
-    choices=[0, 1, 2, 3],
+    choices=[0, 1, 2],
     required=True,
     help="0: no ReLU, 1: between layers only, 2: between layers and inside neurons",
 )
@@ -116,14 +116,10 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     best_acc = 0
     accs = {}
 
-    # Categorical powers-of-two: avoids tiny batches (e.g. 35) that starve the
-    # GPU, and limits shapes to 5 values so cudnn.benchmark tunes once per shape.
-    batch_size = trial.suggest_categorical("batch_size", [64, 128, 256, 512, 1024])
+    batch_size = trial.suggest_float("batch_size", 50, 500, log=True)
 
     for i in range(args.epoch // args.prune_resolution):
         model.train(X_train, y_train, batch_size, args.lr, args.prune_resolution)
-
-
 
         acc = model.test(X_test, y_test)
         accs[i * args.prune_resolution] = acc
@@ -135,6 +131,10 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
         trial.report(acc, i * args.prune_resolution)
         if trial.should_prune():
             raise optuna.TrialPruned()
+        
+        if 100 + args.prune_resolution >= i * args.prune_resolution >= 100:
+            for g in model.optimizer.param_groups:
+                    g["lr"] *= 0.1
 
     with open(f"{trial_dir}/accuracies.pkl", "wb") as f:
         pickle.dump(accs, f)

@@ -65,13 +65,13 @@ class BasicBlock(nn.Module):
 
         out = self.bn1(self.conv1r(x)*self.conv1g(x) + self.conv1b(x.pow(2)))
 
-        if relu == 3:
+        if relu == 2:
             out = F.relu(out)
 
         out = self.bn2(self.conv2r(out)*self.conv2g(out) + self.conv2b(out.pow(2)))
         out += self.shortcut(x)
 
-        if relu in [2, 3]:
+        if relu == 2:
             out = F.relu(out)
 
         return out
@@ -141,28 +141,55 @@ class Quad_neuron():
 
         # Setup optimizer parameters once per trial if trial is provided
         if self.trial is not None:
-            self.optimizer_name = self.trial.suggest_categorical("optimizer", ["Adam", "AdamW", "SGD"])
-            self.lr = self.trial.suggest_float("lr", 1e-7, 1, log=True)
-            if self.optimizer_name == "AdamW":
-                self.weight_decay = self.trial.suggest_float("weight_decay", 1e-5, 1e-1, log=True)
-                self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay, fused=self.use_amp)
-            elif self.optimizer_name == "SGD":
+            self.optimizer_name = self.trial.suggest_categorical("optimizer", ["Adam","SGD"])
+            self.lr = self.trial.suggest_float("lr", 1e-5, 1, log=True)          # gamma_r (linear/r branch)
+
+            self.relinear_ratio_b = self.trial.suggest_float("relinear_ratio_b", 1e-5, 1.0, log=True)
+            self.relinear_ratio_g = self.trial.suggest_float("relinear_ratio_g", 1e-5, 1.0, log=True)
+
+            gamma_r = self.lr
+            gamma_g = self.lr * self.relinear_ratio_g 
+            gamma_b = self.lr * self.relinear_ratio_b 
+            param_groups = self._relinear_param_groups(gamma_r, gamma_g, gamma_b)
+
+            if self.optimizer_name == "SGD":
                 self.momentum = self.trial.suggest_float("momentum", 0.5, 0.99)
-                self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, momentum=self.momentum)
+                self.optimizer = torch.optim.SGD(param_groups, lr=gamma_r, momentum=self.momentum)
             else:
-                self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.lr, fused=self.use_amp)
+                self.optimizer = torch.optim.Adam(param_groups, lr=gamma_r, fused=self.use_amp)
         else:
             self.optimizer_name = "Adam"
             self.lr = 1e-3
-            self.optimizer = None # Will be initialized in train() using provided lr
+            self.relinear_ratio = 1e-2  # default gamma_g/gamma_r when no trial drives the search
+            self.optimizer = None       # built in train() using the lr passed there
+
+    def _relinear_param_groups(self, gamma_r, gamma_g, gamma_b):
+
+        base, g, b = [], [], []
+        for name, p in self.model.named_parameters():
+            if not p.requires_grad:
+                continue
+            owner = name.split('.')[-2] if '.' in name else ''
+            if owner.startswith('conv') and owner.endswith('g'):
+                g.append(p)
+            elif owner.startswith('conv') and owner.endswith('b'):
+                b.append(p)
+            else:
+                base.append(p)
+
+        groups = [
+            {"params": base, "lr": gamma_r, "name": "linear_r"},
+            {"params": g,    "lr": gamma_g, "name": "quad_g"},
+            {"params": b,    "lr": gamma_b, "name": "quad_b"},
+        ]
+        # Drop empty groups so fused optimizer kernels don't choke on them.
+        return [grp for grp in groups if len(grp["params"]) > 0]
 
     def train(self, X, y, batch_size, lr, epochs):
         # X/y already live on self.device (loaded resident once in
         # Train_Model.py) - iterate_batches indexes batches straight out of
         # them, skipping DataLoader/TensorDataset collation, pinning and the
         # per-batch host->device copy entirely.
-        if self.optimizer is None:
-            self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         self.model.train()
         for _ in range(epochs):
 
@@ -182,10 +209,6 @@ class Quad_neuron():
                 self.scaler.scale(loss).backward()
                 self.scaler.step(self.optimizer)
                 self.scaler.update()
-
-
-
-
         return None
 
 
@@ -218,5 +241,3 @@ class Quad_neuron():
         # Cached: called once per Optuna trial when --load_path is set, so
         # avoid re-reading the same checkpoint from disk every trial.
         self.model.load_state_dict(load_checkpoint(path))
-
-
