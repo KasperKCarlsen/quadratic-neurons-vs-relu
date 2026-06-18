@@ -345,6 +345,7 @@ class LoRA:
                 total += labels.size(0)
 
 
+        return acc_train, loss_train
 
     def test(self, X, y):
         self.model.eval()  # disable dropout/batchnorm training behavior

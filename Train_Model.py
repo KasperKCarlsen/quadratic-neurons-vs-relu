@@ -28,6 +28,14 @@ MODEL_MAP = {
     "LoRA": LoRA,
 }
 
+optimizer_map = {
+"Adam": torch.optim.Adam,
+"AdamW": torch.optim.AdamW,
+"SGD": torch.optim.SGD,
+}
+
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "--model", choices=list(MODEL_MAP.keys()), required=True, help="Model name"

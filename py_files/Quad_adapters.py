@@ -226,6 +226,8 @@ class Quad_adapters:
         total_params = sum(p.numel() for p in self.model.parameters())
 
 
+        acc_train = {}
+        loss_train = {}
         for epoch in range(epochs):
             self.model.train()
             # Accumulate on-device and only sync to the CPU once per epoch -
