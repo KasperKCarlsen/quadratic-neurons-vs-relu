@@ -16,7 +16,7 @@ set -euo pipefail
 cd ~/Fagprojekt
 mkdir -p logs optuna_databases
 # ---- experiment config (edit these) ---------------------------------
-NUM_WORKERS=3
+NUM_WORKERS=1
 DATASET=cifar100
 MODEL=ViT_baseline            # ViT_quad | ViT_baseline
 FULL_ARG=--full           # --full (cross-term) | --no-full (reduced). ViT_quad only.
