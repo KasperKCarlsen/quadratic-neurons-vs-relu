@@ -1,26 +1,28 @@
 #!/bin/bash
 #     mkdir -p logs && bsub < submit_hpo_mps.lsf
 #BSUB -J quad_mps
-#BSUB -q gpua100
+#BSUB -q gpuv100
 #BSUB -gpu "num=1:mode=exclusive_process:mps=yes" 
-#BSUB -n 12                                     
+#BSUB -n 4                                     
 #BSUB -R "span[hosts=1]"
-#BSUB -R "rusage[mem=1GB]"                        
-#BSUB -W 1:00                                     
+#BSUB -R "rusage[mem=3GB]"                        
+#BSUB -W 10:00                                     
 #BSUB -B
 #BSUB -N
 #BSUB -u s234813@dtu.dk
+#BSUB -o ~//logs/.out
+#BSUB -e ~//job.err my_script.sh
 set -euo pipefail
 cd ~/Fagprojekt
 mkdir -p logs optuna_databases
 # ---- experiment config (edit these) ---------------------------------
-NUM_WORKERS=2
+NUM_WORKERS=3
 MODEL=Quad_neuron
-RELU=2
-BLOCKS=(5 5 5)                
-EPOCHS=40
-TRIALS_PER_WORKER=15     
-AMP_DTYPE=bf16               # bf16 = A100/Ampere default. Set to fp16 for THIS cluster's gpuv100 queue (Volta has no hardware bf16); fp16 auto-enables a GradScaler. 'off' = fp32.
+RELU=0
+BLOCKS=(9 9 9)                
+EPOCHS=150
+TOTAL_TRIALS=25
+AMP_DTYPE=off               # bf16 = A100/Ampere default. Set to fp16 for THIS cluster's gpuv100 queue (Volta has no hardware bf16); fp16 auto-enables a GradScaler. 'off' = fp32.
 CLASSES=(0 1 2 3 4 5 6 7 8 9) 
 LOAD_PATH=""                
 # ---------------------------------------------------------------------
@@ -44,13 +46,6 @@ LOAD_PATH_ARG=()
 [ -n "$LOAD_PATH" ] && LOAD_PATH_ARG=(--load_path "$LOAD_PATH")
 echo "Job ${LSB_JOBID:-?} started $(date) on $(hostname) | workers=${NUM_WORKERS}"
 # --- Environment -----------------------------------------------------
-# module load cuda/12.4    # uncomment ONLY if torch can't see the GPU; pip-torch bundles its own CUDA
-source .optuna/bin/activate
-# source ~/miniconda3/etc/profile.d/conda.sh && conda activate cifar   # conda alternative
-# Unbuffer Python's stdout/stderr so each worker's output is written to its log
-# AS IT HAPPENS, not in big blocks at flush time. Without this the per-worker
-# files (and therefore the live `tail -F` below + `bpeek`) only update in bursts.
-export PYTHONUNBUFFERED=1
 # Split the granted cores across workers so the N processes don't oversubscribe
 # the CPU (N workers x all-cores each = thrash). Floor at 1.
 NPROC=${LSB_DJOB_NUMPROC:-12}
@@ -71,7 +66,7 @@ for i in $(seq 1 "$NUM_WORKERS"); do
         --num_blocks "${BLOCKS[@]}" \
         --classes "${CLASSES[@]}" \
         --epoch "$EPOCHS" \
-        --n_trials "$TRIALS_PER_WORKER" \
+        --total_trials "$TOTAL_TRIALS" \
         --amp_dtype "$AMP_DTYPE" \
         --storage journal \
         "${LOAD_PATH_ARG[@]}" \
