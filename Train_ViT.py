@@ -77,14 +77,11 @@ parser.add_argument("--dataset", choices=["cifar10", "cifar100"], default="cifar
 
 
 def build_storage(backend, name_base):
-    """Persist the Optuna study. journal = many MPS workers sharing one study on
-    a networked filesystem (the HPC case); sqlite = single local process."""
+    """Always journal storage: writes optuna_databases/<name_base>.log."""
     os.makedirs("optuna_databases", exist_ok=True)
-    if backend == "journal":
-        from optuna.storages import JournalStorage
-        from optuna.storages.journal import JournalFileBackend
-        return JournalStorage(JournalFileBackend(f"optuna_databases/{name_base}.log"))
-    return f"sqlite:///optuna_databases/{name_base}.db"
+    from optuna.storages import JournalStorage
+    from optuna.storages.journal import JournalFileBackend
+    return JournalStorage(JournalFileBackend(f"optuna_databases/{name_base}.log"))
 
 
 def build_name_base(args):
