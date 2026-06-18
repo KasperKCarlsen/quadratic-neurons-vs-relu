@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/zhome/99/4/216796/Fagprojekt/Train_Model.py", line 223, in <module>
+    X_train = X_train.to(device)
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 470.00 MiB. GPU 0 has a total capacity of 15.77 GiB of which 154.25 MiB is free. Process 864785 has 36.00 MiB memory in use. Process 864747 has 5.49 GiB memory in use. Process 864796 has 9.79 GiB memory in use. Including non-PyTorch memory, this process has 306.00 MiB memory in use. Of the allocated memory 0 bytes is allocated by PyTorch, and 0 bytes is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

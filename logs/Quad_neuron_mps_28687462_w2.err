@@ -1,0 +1,69 @@
+[I 2026-06-17 19:38:12,787] Using an existing study with name 'Quad_neuron_with_ReLU2_arc_(18_18_18)' instead of creating a new one.
+[W 2026-06-17 19:38:22,578] Trial 2 failed with parameters: {'optimizer': 'AdamW', 'lr': 0.000482829163294431, 'weight_decay': 0.0010219295949776045, 'batch_size': 128} because of the following error: OutOfMemoryError('CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 15.77 GiB of which 12.25 MiB is free. Process 3476389 has 36.00 MiB memory in use. Process 3476383 has 5.91 GiB memory in use. Process 3476303 has 7.13 GiB memory in use. Including non-PyTorch memory, this process has 2.67 GiB memory in use. Of the allocated memory 2.17 GiB is allocated by PyTorch, and 147.92 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)').
+Traceback (most recent call last):
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/optuna/study/_optimize.py", line 206, in _run_trial
+    value_or_values = func(trial)
+  File "/zhome/99/4/216796/Fagprojekt/Train_Model.py", line 257, in <lambda>
+    lambda trial: objective(trial, args, save_dir, X_train, y_train, X_test, y_test),
+  File "/zhome/99/4/216796/Fagprojekt/Train_Model.py", line 132, in objective
+    model.train(X_train, y_train, batch_size, args.lr, args.prune_resolution)
+  File "/zhome/99/4/216796/Fagprojekt/py_files/Quad_Neuron.py", line 180, in train
+    outputs = self.fwd(images)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/Fagprojekt/py_files/Quad_Neuron.py", line 114, in forward
+    out = F.relu(self.layer2(out))
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/container.py", line 244, in forward
+    input = module(input)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/Fagprojekt/py_files/Quad_Neuron.py", line 66, in forward
+    out = self.bn1(self.conv1r(x)*self.conv1g(x) + self.conv1b(x.pow(2)))
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 15.77 GiB of which 12.25 MiB is free. Process 3476389 has 36.00 MiB memory in use. Process 3476383 has 5.91 GiB memory in use. Process 3476303 has 7.13 GiB memory in use. Including non-PyTorch memory, this process has 2.67 GiB memory in use. Of the allocated memory 2.17 GiB is allocated by PyTorch, and 147.92 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[W 2026-06-17 19:38:22,581] Trial 2 failed with value None.
+Traceback (most recent call last):
+  File "/zhome/99/4/216796/Fagprojekt/Train_Model.py", line 256, in <module>
+    study.optimize(
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/optuna/study/study.py", line 516, in optimize
+    _optimize(
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/optuna/study/_optimize.py", line 68, in _optimize
+    _optimize_sequential(
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/optuna/study/_optimize.py", line 165, in _optimize_sequential
+    frozen_trial_id = _run_trial(study, func, catch)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/optuna/study/_optimize.py", line 263, in _run_trial
+    raise func_err
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/optuna/study/_optimize.py", line 206, in _run_trial
+    value_or_values = func(trial)
+  File "/zhome/99/4/216796/Fagprojekt/Train_Model.py", line 257, in <lambda>
+    lambda trial: objective(trial, args, save_dir, X_train, y_train, X_test, y_test),
+  File "/zhome/99/4/216796/Fagprojekt/Train_Model.py", line 132, in objective
+    model.train(X_train, y_train, batch_size, args.lr, args.prune_resolution)
+  File "/zhome/99/4/216796/Fagprojekt/py_files/Quad_Neuron.py", line 180, in train
+    outputs = self.fwd(images)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/Fagprojekt/py_files/Quad_Neuron.py", line 114, in forward
+    out = F.relu(self.layer2(out))
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/container.py", line 244, in forward
+    input = module(input)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/zhome/99/4/216796/.local/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/zhome/99/4/216796/Fagprojekt/py_files/Quad_Neuron.py", line 66, in forward
+    out = self.bn1(self.conv1r(x)*self.conv1g(x) + self.conv1b(x.pow(2)))
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 15.77 GiB of which 12.25 MiB is free. Process 3476389 has 36.00 MiB memory in use. Process 3476383 has 5.91 GiB memory in use. Process 3476303 has 7.13 GiB memory in use. Including non-PyTorch memory, this process has 2.67 GiB memory in use. Of the allocated memory 2.17 GiB is allocated by PyTorch, and 147.92 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
