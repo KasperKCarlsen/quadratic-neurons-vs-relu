@@ -124,7 +124,7 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     best_acc = 0
     accs = {}
 
-    batch_size = trial.suggest_float("batch_size", 50, 500, log=True)
+    batch_size = trial.suggest_int("batch_size", 50, 500, log=True)
 
     for i in range(args.epoch // args.prune_resolution):
         model.train(X_train, y_train, batch_size, args.lr, args.prune_resolution)
