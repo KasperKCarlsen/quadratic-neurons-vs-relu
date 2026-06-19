@@ -1,0 +1,8 @@
+usage: Train_Model.py [-h] --model
+                      {Quad_neuron,Quad_adapters,Baseline,LoRA,ViT_baseline}
+                      --ReLU {0,1,2} --epoch EPOCH [--save_epoch SAVE_EPOCH]
+                      [--batch_size BATCH_SIZE] [--val VAL] [--lr LR]
+                      --num_blocks NUM_BLOCKS [NUM_BLOCKS ...]
+                      [--classes CLASSES [CLASSES ...]]
+                      [--load_path LOAD_PATH] [--test_split TEST_SPLIT]
+Train_Model.py: error: unrecognized arguments: --total_trials 40 --amp_dtype off --storage journal
