@@ -78,11 +78,22 @@ parser.add_argument("--dataset", choices=["cifar10", "cifar100"], default="cifar
 
 
 def build_storage(backend, name_base):
-    """Always journal storage: writes optuna_databases/<name_base>.log."""
+    """Create the study storage for the chosen backend:
+      sqlite  -> optuna_databases/<name_base>.db
+      journal -> optuna_databases/<name_base>.log
+
+    The journal backend's *default* lock creates an os.symlink, which on Windows
+    needs Administrator rights or Developer Mode (otherwise WinError 1314 - "a
+    required privilege is not held by the client"). We pass an open()-based lock
+    instead, which needs no special privileges and works cross-platform.
+    """
     os.makedirs("optuna_databases", exist_ok=True)
+    if backend == "sqlite":
+        return f"sqlite:///optuna_databases/{name_base}.db"
     from optuna.storages import JournalStorage
-    from optuna.storages.journal import JournalFileBackend
-    return JournalStorage(JournalFileBackend(f"optuna_databases/{name_base}.log"))
+    from optuna.storages.journal import JournalFileBackend, JournalFileOpenLock
+    path = f"optuna_databases/{name_base}.log"
+    return JournalStorage(JournalFileBackend(path, lock_obj=JournalFileOpenLock(path)))
 
 
 def build_name_base(args):

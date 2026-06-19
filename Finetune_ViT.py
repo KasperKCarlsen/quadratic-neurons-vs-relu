@@ -213,8 +213,11 @@ def load_study(name_base):
     db_path = f"optuna_databases/{name_base}.db"
     if os.path.exists(log_path):
         from optuna.storages import JournalStorage
-        from optuna.storages.journal import JournalFileBackend
-        storage = JournalStorage(JournalFileBackend(log_path))
+        from optuna.storages.journal import JournalFileBackend, JournalFileOpenLock
+        # open()-based lock: the default symlink lock needs admin/Developer Mode
+        # on Windows (WinError 1314). Must match how Train_ViT.py writes the log.
+        storage = JournalStorage(
+            JournalFileBackend(log_path, lock_obj=JournalFileOpenLock(log_path)))
     elif os.path.exists(db_path):
         storage = f"sqlite:///{db_path}"
     else:
