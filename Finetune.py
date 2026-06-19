@@ -25,6 +25,7 @@ Usage (Windows GPU):
 """
 
 import os
+import re
 import ast
 import glob
 import json
@@ -108,9 +109,19 @@ def load_study(model, relu, name_base):
 def parse_params(src):
     """Turn user-supplied hyperparameters into a plain dict, accepting (in order):
     a path to a file holding any of the below; inline JSON; a Python-literal dict;
-    or the 'key: value' block Optuna prints (one param per line). Values are
-    coerced via ast.literal_eval where possible, so '147' -> int and 'Adam' ->
-    str. Lines without a colon (e.g. a stray 'for relu 0 9 9 9' note) are ignored.
+    or 'key: value' pairs separated by newlines and/or commas. Values are coerced
+    via ast.literal_eval where possible, so '147' -> int and 'Adam' -> str. Pairs
+    without a colon (e.g. a stray 'for relu 0 9 9 9' note) are ignored.
+
+    The last form is deliberately forgiving so that an inline dict mangled by a
+    shell still parses: Windows PowerShell, for instance, strips the inner
+    double-quotes when passing JSON to a native exe, turning
+        {"optimizer": "Adam", "batch_size": 147}
+    into
+        {optimizer: Adam, batch_size: 147}
+    which is neither valid JSON nor a Python literal. We strip surrounding braces
+    and stray quotes and split on commas to recover it anyway. (Passing a file via
+    --params sidesteps shell quoting entirely and is the robust option.)
     """
     text = src
     if os.path.exists(src):
@@ -129,13 +140,15 @@ def parse_params(src):
     except (ValueError, SyntaxError):
         pass
 
-    params = {}                            # 3) 'key: value' lines
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or ":" not in line:
+    params = {}                            # 3) 'key: value' pairs (newline/comma)
+    body = text.strip().lstrip("{").rstrip("}")
+    for pair in re.split(r"[\n,]", body):
+        pair = pair.strip()
+        if not pair or ":" not in pair:
             continue
-        key, _, val = line.partition(":")
-        key, val = key.strip(), val.strip()
+        key, _, val = pair.partition(":")
+        key = key.strip().strip("\"'")
+        val = val.strip().strip("\"'")
         try:
             params[key] = ast.literal_eval(val)
         except (ValueError, SyntaxError):
