@@ -7,10 +7,21 @@ model from a fresh random init with exactly those hyperparameters, trains it
 across --seeds (default 5) and saves each seed's best-on-test checkpoint plus a
 mean +/- std summary to Done_models/<config>/.
 
+Studies are read from optuna_databases/ in either backend: sqlite (*_study.db)
+or Optuna journal (*_study.log). Alternatively, --params trains a single config
+from hyperparameters supplied directly, with no study at all.
+
 Usage (Windows GPU):
     python Finetune.py --epochs 100
     python Finetune.py --epochs 100 --seeds 0 1 2 3 4
     python Finetune.py --epochs 100 --only "Quad_neuron_with_ReLU2_arc_[5, 5, 5]"
+
+    # Raw hyperparameters (no study DB needed); --params takes inline JSON,
+    # a 'key: value' block, or a path to a file containing either:
+    python Finetune.py --epochs 100 --model Quad_neuron --relu 0 --num-blocks 9 9 9 \
+        --params '{"optimizer": "Adam", "lr": 0.0022126, "batch_size": 147}'
+    python Finetune.py --epochs 100 --model Quad_neuron --relu 0 --num-blocks 9 9 9 \
+        --params best_params.txt
 """
 
 import os
@@ -24,6 +35,8 @@ import argparse
 import torch    
 import numpy as np
 import optuna
+
+from collections import namedtuple
 
 from funcs import load_batch, get_classes_dataset
 from py_files.Quad_Neuron import Quad_neuron
@@ -43,16 +56,98 @@ MODEL_MAP = {
 }
 FROM_SCRATCH = (Quad_neuron, Baseline)  # the rest need a --load_path pretrained net
 
+# Hyperparameter keys the final-training pipeline actually applies. Anything else
+# in a params dict (e.g. an old study's relinear_ratio_*) is reported and ignored,
+# so a user is never misled into thinking a value took effect when it didn't.
+CONSUMED_PARAMS = {"optimizer", "lr", "weight_decay", "momentum", "batch_size"}
 
-def parse_study_db(db_path):
-    """Recover (model, relu, num_blocks, name_base) from an optuna_databases/*.db
-    filename. Mirrors the name_base built in Train_Model.build_storage:
-        {model}_with_ReLU{relu}_arc_{num_blocks}_study.db
+# One config to finalize: where its params came from, plus enough to rebuild it.
+# hpo_value is the study's best_value, or None when params are fed in raw.
+Spec = namedtuple("Spec", "model relu num_blocks name_base params hpo_value")
+
+
+def parse_name_base(name_base):
+    """Recover (model, relu, num_blocks) from a study name_base. Mirrors the
+    name_base Train_Model.py encodes into its storage filename:
+        {model}_with_ReLU{relu}_arc_{num_blocks}
     """
-    name_base = os.path.basename(db_path)[: -len("_study.db")]
     model, rest = name_base.split("_with_ReLU", 1)
     relu_str, arc_str = rest.split("_arc_", 1)
-    return model, int(relu_str), ast.literal_eval(arc_str), name_base
+    return model, int(relu_str), ast.literal_eval(arc_str)
+
+
+def discover_studies():
+    """Every study name_base under optuna_databases/, from either backend:
+    sqlite (*_study.db) or Optuna journal (*_study.log). The '_study.<ext>'
+    suffix is stripped so the two backends collapse to the same name_base."""
+    paths = (glob.glob("optuna_databases/*_study.db")
+             + glob.glob("optuna_databases/*_study.log"))
+    name_bases = set()
+    for p in paths:
+        base = os.path.basename(p)
+        for suf in ("_study.db", "_study.log"):
+            if base.endswith(suf):
+                name_bases.add(base[: -len(suf)])
+                break
+    return sorted(name_bases)
+
+
+def load_study(model, relu, name_base):
+    """Reload a study from whichever backend produced it, journal (.log)
+    preferred over sqlite (.db) when both exist. Study name matches the one
+    Train_Model.py created: '{model}_with_ReLU{relu}_optimization'."""
+    log_path = f"optuna_databases/{name_base}_study.log"
+    db_path = f"optuna_databases/{name_base}_study.db"
+    if os.path.exists(log_path):
+        from optuna.storages import JournalStorage
+        from optuna.storages.journal import JournalFileBackend
+        storage = JournalStorage(JournalFileBackend(log_path))
+    elif os.path.exists(db_path):
+        storage = f"sqlite:///{db_path}"
+    else:
+        raise FileNotFoundError(f"No .log or .db storage for study {name_base!r}")
+    return optuna.load_study(
+        study_name=f"{model}_with_ReLU{relu}_optimization", storage=storage)
+
+
+def parse_params(src):
+    """Turn user-supplied hyperparameters into a plain dict, accepting (in order):
+    a path to a file holding any of the below; inline JSON; a Python-literal dict;
+    or the 'key: value' block Optuna prints (one param per line). Values are
+    coerced via ast.literal_eval where possible, so '147' -> int and 'Adam' ->
+    str. Lines without a colon (e.g. a stray 'for relu 0 9 9 9' note) are ignored.
+    """
+    text = src
+    if os.path.exists(src):
+        with open(src) as f:
+            text = f.read()
+    text = text.strip()
+
+    try:                                   # 1) JSON
+        return json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        pass
+    try:                                   # 2) Python-literal dict
+        obj = ast.literal_eval(text)
+        if isinstance(obj, dict):
+            return obj
+    except (ValueError, SyntaxError):
+        pass
+
+    params = {}                            # 3) 'key: value' lines
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or ":" not in line:
+            continue
+        key, _, val = line.partition(":")
+        key, val = key.strip(), val.strip()
+        try:
+            params[key] = ast.literal_eval(val)
+        except (ValueError, SyntaxError):
+            params[key] = val
+    if not params:
+        raise SystemExit(f"Could not parse any hyperparameters from: {src!r}")
+    return params
 
 
 def load_run_args(save_dir):
@@ -206,8 +301,24 @@ def plot_seed_summary(config_name, accs_per_seed, mean_best, std_best):
     print(f"  [plot] wrote {out_path}")
 
 
-def train_one(db_path, args, device):
-    model_name, relu, num_blocks, name_base = parse_study_db(db_path)
+def validate_params(name_base, best):
+    """Fail loudly on the few keys the pipeline genuinely needs, and warn (don't
+    fail) on keys it will silently ignore, so what actually takes effect is never
+    a mystery."""
+    if "batch_size" not in best:
+        raise SystemExit(f"{name_base}: params are missing required 'batch_size'.")
+    opt = best.get("optimizer", "Adam")
+    if opt == "AdamW" and "weight_decay" not in best:
+        raise SystemExit(f"{name_base}: optimizer AdamW needs 'weight_decay'.")
+    if opt == "SGD" and "momentum" not in best:
+        raise SystemExit(f"{name_base}: optimizer SGD needs 'momentum'.")
+    ignored = sorted(set(best) - CONSUMED_PARAMS)
+    if ignored:
+        print(f"  [warn] params not applied by this pipeline (ignored): {ignored}")
+
+
+def train_one(spec, args, device):
+    model_name, relu, num_blocks, name_base, best, hpo_value = spec
     save_dir = f"models/{model_name}_ReLU{relu}_arc_{num_blocks}"
 
     model_class = MODEL_MAP[model_name]
@@ -215,12 +326,12 @@ def train_one(db_path, args, device):
         print(f"[skip] {name_base}: {model_name} needs --load_path (pretrained net).")
         return
 
-    # Recover the best hyperparameters from the study.
-    study = optuna.load_study(
-        study_name=f"{model_name}_with_ReLU{relu}_optimization",
-        storage=f"sqlite:///optuna_databases/{name_base}_study.db",
-    )
-    best = study.best_params
+    print(f"\n=== {name_base} ===")
+    if hpo_value is not None:
+        print(f"  best_value(HPO)={hpo_value:.4f}  params={best}")
+    else:
+        print(f"  raw params (no study)={best}")
+    validate_params(name_base, best)
     batch_size = best["batch_size"]
 
     # Reuse this run's original classes / split if recorded.
@@ -229,8 +340,6 @@ def train_one(db_path, args, device):
     val = getattr(run_args, "val", True)
     test_split = getattr(run_args, "test_split", 0.2)
 
-    print(f"\n=== {name_base} ===")
-    print(f"  best_value(HPO)={study.best_value:.4f}  params={best}")
     # Prepared once and reused for every seed. The split is fixed (seed 42 inside
     # prepare_data), so all seeds are scored on the IDENTICAL test set and the
     # spread reflects training randomness only, not a different test set.
@@ -255,7 +364,7 @@ def train_one(db_path, args, device):
     mean = float(vals.mean())
     std = float(vals.std(ddof=1)) if len(vals) > 1 else 0.0  # sample std over seeds
     summary = {
-        "hpo_best_value": study.best_value,
+        "hpo_best_value": hpo_value,
         "params": best,
         "epochs": args.epochs,
         "seeds": list(args.seeds),
@@ -272,9 +381,42 @@ def train_one(db_path, args, device):
     plot_seed_summary(config_name, accs_per_seed, mean, std)
 
 
+def specs_from_studies(args):
+    """Build a Spec per discovered study (sqlite .db or journal .log), honoring
+    --only. This is the original behavior, now backend-agnostic."""
+    name_bases = discover_studies()
+    if args.only:
+        name_bases = [n for n in name_bases if n == args.only]
+        if not name_bases:
+            raise SystemExit(f"No study (.db/.log) matching --only '{args.only}'")
+    specs = []
+    for nb in name_bases:
+        model, relu, num_blocks = parse_name_base(nb)
+        study = load_study(model, relu, nb)
+        specs.append(Spec(model, relu, num_blocks, nb, study.best_params,
+                          study.best_value))
+    return specs
+
+
+def spec_from_raw(args):
+    """Build a single Spec from hyperparameters fed on the command line, with no
+    study involved. The config (model/relu/num_blocks) must be given explicitly
+    since there is no study filename to recover it from."""
+    missing = [f"--{n}" for n in ("model", "relu", "num_blocks")
+               if getattr(args, n) is None]
+    if missing:
+        raise SystemExit(f"--params also requires: {', '.join(missing)}")
+    if args.model not in MODEL_MAP:
+        raise SystemExit(f"--model must be one of {list(MODEL_MAP)}")
+    best = parse_params(args.params)
+    name_base = f"{args.model}_with_ReLU{args.relu}_arc_{args.num_blocks}"
+    return [Spec(args.model, args.relu, args.num_blocks, name_base, best, None)]
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Final training with the best HPO hyperparameters.")
+        description="Final training from the best HPO hyperparameters (sqlite .db "
+                    "or journal .log studies), or from raw params via --params.")
     parser.add_argument("--epochs", type=int, required=True,
                         help="Epochs for the final training run.")
     parser.add_argument("--only", type=str, default=None,
@@ -287,17 +429,27 @@ if __name__ == "__main__":
     parser.add_argument("--refit-full", dest="refit_full", action="store_true",
                         help="Refit final models on train+val (hyperparameters fixed) "
                              "before evaluating on the official test set.")
+    # Raw-params mode: skip studies entirely and train exactly these numbers.
+    parser.add_argument("--params", type=str, default=None,
+                        help="Hyperparameters to train directly, bypassing any study. "
+                             "Accepts inline JSON, a Python dict literal, the 'key: value' "
+                             "block Optuna prints, or a path to a file holding any of those. "
+                             "Requires --model, --relu and --num-blocks.")
+    parser.add_argument("--model", type=str, default=None,
+                        help=f"Raw mode: model name, one of {list(MODEL_MAP)}.")
+    parser.add_argument("--relu", type=int, default=None,
+                        help="Raw mode: ReLU variant (0/1/2).")
+    parser.add_argument("--num-blocks", dest="num_blocks", type=int, nargs="+",
+                        default=None, help="Raw mode: blocks per stage, e.g. --num-blocks 9 9 9.")
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    db_paths = sorted(glob.glob("optuna_databases/*_study.db"))
-    if args.only:
-        db_paths = [p for p in db_paths
-                    if os.path.basename(p) == f"{args.only}_study.db"]
-        if not db_paths:
-            raise SystemExit(f"No study DB matching --only '{args.only}'")
-
-    print(f"Found {len(db_paths)} study DB(s); training on {device}.")
-    for db_path in db_paths:
-        train_one(db_path, args, device)
+    if args.params is not None:
+        specs = spec_from_raw(args)
+        print(f"Raw-params mode: training {len(specs)} config on {device}.")
+    else:
+        specs = specs_from_studies(args)
+        print(f"Found {len(specs)} study(ies); training on {device}.")
+    for spec in specs:
+        train_one(spec, args, device)
