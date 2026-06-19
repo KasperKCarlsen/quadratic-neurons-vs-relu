@@ -4,13 +4,14 @@ import torch.nn.functional as F
 import torch.nn.init as init
 from torch.autograd import Variable
 import pandas as pd
-from torch.utils.data import TensorDataset, DataLoader
 import torchvision
 import torchvision.transforms as transforms
 import pickle
 import numpy as np
 import loralib as lora
 import math
+
+from funcs import load_checkpoint, iterate_batches, resolve_amp_dtype
 
 
 class LambdaLayer(nn.Module):
@@ -110,49 +111,20 @@ class LoRAConv2d(nn.Module):
             param.requires_grad = False
 
 
-# BasicBlock with LoRA
+# BasicBlock with LoRA: wraps the Baseline's frozen convolutions with
+# trainable low-rank adapters (mirrors Baseline.BasicBlock's structure so
+# pretrained weights line up, but each conv gains a LoRA increment).
 class BasicBlockLoRA(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, config, stride=1, option="A", rank=4):
+    def __init__(self, in_planes, planes, relu, stride=1, option="A", rank=4):
         super().__init__()
-        self.config = config
+        self.relu = relu
 
-        # Replace regular Conv2d with LoRAConv2d for each color channel
         self.conv1r = LoRAConv2d(in_planes, planes, 3, stride, 1, bias=True, rank=rank)
-        self.conv1g = LoRAConv2d(in_planes, planes, 3, stride, 1, bias=True, rank=rank)
-        self.conv1b = LoRAConv2d(in_planes, planes, 3, stride, 1, bias=True, rank=rank)
-
-        # Initialize conv1g and conv1b to near identity
-        with torch.no_grad():
-            # For conv1g: make it identity-like
-            if hasattr(self.conv1g, "conv"):
-                self.conv1g.conv.weight.fill_(0)
-                if self.conv1g.conv.bias is not None:
-                    self.conv1g.conv.bias.fill_(1)
-            # For conv1b: make it zero
-            if hasattr(self.conv1b, "conv"):
-                self.conv1b.conv.weight.fill_(0)
-                if self.conv1b.conv.bias is not None:
-                    self.conv1b.conv.bias.fill_(0)
-
         self.bn1 = nn.BatchNorm2d(planes)
 
         self.conv2r = LoRAConv2d(planes, planes, 3, 1, 1, bias=True, rank=rank)
-        self.conv2g = LoRAConv2d(planes, planes, 3, 1, 1, bias=True, rank=rank)
-        self.conv2b = LoRAConv2d(planes, planes, 3, 1, 1, bias=True, rank=rank)
-
-        # Initialize conv2g and conv2b to near identity
-        with torch.no_grad():
-            if hasattr(self.conv2g, "conv"):
-                self.conv2g.conv.weight.fill_(0)
-                if self.conv2g.conv.bias is not None:
-                    self.conv2g.conv.bias.fill_(1)
-            if hasattr(self.conv2b, "conv"):
-                self.conv2b.conv.weight.fill_(0)
-                if self.conv2b.conv.bias is not None:
-                    self.conv2b.conv.bias.fill_(0)
-
         self.bn2 = nn.BatchNorm2d(planes)
 
         self.shortcut = nn.Sequential()
@@ -164,52 +136,63 @@ class BasicBlockLoRA(nn.Module):
             )
 
     def forward(self, x):
-        # Using only the R channel convolutions as in your original
         out = self.bn1(self.conv1r(x))
-        out = F.relu(out)
+
+        if self.relu == 2:
+            out = F.relu(out)
+
         out = self.bn2(self.conv2r(out))
         out += self.shortcut(x)
-        out = F.relu(out)
+
+        if self.relu in [1, 2]:
+            out = F.relu(out)
+
         return out
 
 
-# Modified QResNet with LoRA
+# Modified QResNet with LoRA. Mirrors QResNet's structure/parameter
+# conventions (relu, num_blocks, classes) so it lines up with the Baseline
+# checkpoint it adapts, but every conv is a LoRAConv2d (frozen original +
+# trainable low-rank increment).
 class QResNetLoRA(nn.Module):
-    def __init__(self, config, block, num_blocks, rank=4):
+    def __init__(self, relu, block, num_blocks, classes, rank=4):
         super().__init__()
-        self.config = config
+        self.relu = relu
         self.in_planes = 16
-        self.rank = rank
+        self.classes = classes
 
-        # First conv layer (can also use LoRA or keep frozen)
-        self.conv1 = LoRAConv2d(
-            config.input_channels, 16, 3, 1, 1, bias=False, rank=rank
-        )
+        self.conv1 = LoRAConv2d(3, 16, 3, 1, 1, bias=False, rank=rank)
         self.bn1 = nn.BatchNorm2d(16)
 
         self.layer1 = self._make_layer(block, 16, num_blocks[0], rank=rank)
         self.layer2 = self._make_layer(block, 32, num_blocks[1], stride=2, rank=rank)
         self.layer3 = self._make_layer(block, 64, num_blocks[2], stride=2, rank=rank)
 
-        self.linear = nn.Linear(64, config.num_classes)
+        self.linear = nn.Linear(64, len(self.classes))
 
     def _make_layer(self, block, planes, num_blocks, stride=1, rank=4):
         strides = [stride] + [1] * (num_blocks - 1)
         layers = []
 
         for s in strides:
-            layers.append(block(self.in_planes, planes, self.config, s, rank=rank))
+            layers.append(block(self.in_planes, planes, self.relu, s, rank=rank))
             self.in_planes = planes
 
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        out = F.relu(self.bn1(self.conv1(x)))
+        if self.relu == 0:
+            out = self.bn1(self.conv1(x))
+        else:
+            out = F.relu(self.bn1(self.conv1(x)))
+
         out = self.layer1(out)
         out = self.layer2(out)
         out = self.layer3(out)
+
         out = F.avg_pool2d(out, out.size(3))
         out = out.view(out.size(0), -1)
+
         return self.linear(out)
 
 
@@ -239,15 +222,51 @@ class LoRA:
         self,
         Relu,
         num_blocks,
+        pretrained_path,
         block=BasicBlockLoRA,
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         trial=None,
+        amp_dtype="bf16",
+        rank=4,
     ):
-        self.model = QResNetLoRA(Relu, block, num_blocks, classes)
-        self.trial = trial
+        self.model = QResNetLoRA(Relu, block, num_blocks, classes, rank=rank)
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model.to(self.device)
+        # Cached: this constructor runs once per Optuna trial, and re-reading
+        # the same checkpoint from disk every trial is pure overhead.
+        pretrained_dict = load_checkpoint(pretrained_path)
+
+        # The Baseline checkpoint stores each conv as e.g. "conv1r.weight",
+        # but here it's wrapped in a LoRAConv2d as "conv1r.conv.weight".
+        # Strip the ".conv" segment so frozen weights load into the right
+        # place; keys with no such wrapper (bn*, linear) match as-is.
+        model_dict = self.model.state_dict()
+        pretrained_dict_remapped = {}
+        for k, v in model_dict.items():
+            src_key = k.replace(".conv.weight", ".weight").replace(".conv.bias", ".bias")
+            if src_key in pretrained_dict and pretrained_dict[src_key].shape == v.shape:
+                pretrained_dict_remapped[k] = pretrained_dict[src_key]
+
+        model_dict.update(pretrained_dict_remapped)
+        self.model.load_state_dict(
+            model_dict, strict=False
+        )  # strict=False allows missing/unexpected keys
+
+        # Freeze the pretrained convolutions; only the LoRA increments,
+        # batch norm and classifier head remain trainable
+        freeze_original_weights(self.model)
+        if not torch.cuda.is_available():
+            raise Exception("no cuda")
+        self.trial = trial
+        self.device = torch.device("cuda")
+        # channels_last + bf16 autocast is the standard fast recipe for conv
+        # nets on Tensor Core GPUs (A100); keep plain fp32/contiguous on CPU.
+        self.memory_format = torch.channels_last if self.device.type == "cuda" else torch.contiguous_format
+        self.use_amp, self.amp_dtype, _needs_scaler = resolve_amp_dtype(amp_dtype, self.device)
+        # fp16 (V100/Volta path) needs gradient scaling; bf16 (A100) does not.
+        self.scaler = torch.amp.GradScaler("cuda", enabled=_needs_scaler)
+        self.model.to(self.device, memory_format=self.memory_format)
+        self.fwd = self.model
+        self.criterion = nn.CrossEntropyLoss()
 
         if self.trial is not None:
             self.optimizer_name = self.trial.suggest_categorical(
@@ -262,6 +281,7 @@ class LoRA:
                     filter(lambda p: p.requires_grad, self.model.parameters()),
                     lr=self.lr,
                     weight_decay=self.weight_decay,
+                    fused=self.use_amp,
                 )
             elif self.optimizer_name == "SGD":
                 self.momentum = self.trial.suggest_float("momentum", 0.5, 0.99)
@@ -274,81 +294,83 @@ class LoRA:
                 self.optimizer = torch.optim.Adam(
                     filter(lambda p: p.requires_grad, self.model.parameters()),
                     lr=self.lr,
+                    fused=self.use_amp,
                 )
         else:
             self.optimizer_name = "Adam"
             self.lr = 1e-3
             self.optimizer = None
 
-    def train(self, X, y, batch_size, lr, epochs, rank=4):
-        loader = DataLoader(TensorDataset(X, y), batch_size=batch_size, shuffle=True)
-        self.model.to(self.device)
-
-        # Freeze original weights, only train LoRA parameters
-        freeze_original_weights(self.model)
+    def train(self, X, y, batch_size, lr, epochs):
+        # X/y already live on self.device (loaded resident once in
+        # Train_Model.py) - iterate_batches indexes batches straight out of
+        # them, skipping DataLoader/TensorDataset collation, pinning and the
+        # per-batch host->device copy entirely.
 
         # Count trainable parameters
         trainable_params = sum(
             p.numel() for p in self.model.parameters() if p.requires_grad
         )
         total_params = sum(p.numel() for p in self.model.parameters())
-        print(
-            f"Trainable parameters: {trainable_params:,} / {total_params:,} ({100*trainable_params/total_params:.2f}%)"
-        )
+
 
         if self.optimizer is None:
             self.optimizer = torch.optim.Adam(
                 filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr
             )
 
-        criterion = nn.CrossEntropyLoss()
-
         for epoch in range(epochs):
             self.model.train()
-            total, correct, loss_sum = 0, 0, 0
+            # Accumulate on-device and only sync to the CPU once per epoch -
+            # calling .item() inside the loop forces a CUDA sync every batch.
+            total = torch.zeros((), device=self.device)
+            correct = torch.zeros((), device=self.device)
+            loss_sum = torch.zeros((), device=self.device)
 
-            for images, labels in loader:
-                images, labels = images.to(self.device), labels.to(self.device)
+            # Keep batch shape constant on GPU so cudnn.benchmark doesn't have
+            # to re-tune kernels for a one-off, smaller final batch each epoch.
+            for images, labels in iterate_batches(X, y, batch_size, shuffle=True, drop_last=self.use_amp):
+                images = images.to(memory_format=self.memory_format)
 
-                self.optimizer.zero_grad()
-                outputs = self.model(images)
-                loss = criterion(outputs, labels)
-                loss.backward()
-                self.optimizer.step()
+                self.optimizer.zero_grad(set_to_none=True)
+                with torch.autocast(device_type=self.device.type, dtype=self.amp_dtype, enabled=self.use_amp):
+                    outputs = self.fwd(images)
+                    loss = self.criterion(outputs, labels)
+                self.scaler.scale(loss).backward()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
 
-                loss_sum += loss.item() * labels.size(0)
-                preds = outputs.argmax(1)
-                correct += (preds == labels).sum().item()
+                loss_sum += loss.detach() * labels.size(0)
+                correct += (outputs.detach().argmax(1) == labels).sum()
                 total += labels.size(0)
 
-            print(
-                f"Epoch {epoch+1}/{epochs} | "
-                f"Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}"
-            )
+
+        return acc_train, loss_train
 
     def test(self, X, y):
         self.model.eval()  # disable dropout/batchnorm training behavior
-        correct = 0
-        total = 0
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = self.model.to(device)
+        correct = torch.zeros((), device=self.device)
+        total = torch.zeros((), device=self.device)
 
-        train_loader = DataLoader(TensorDataset(X, y), batch_size=128, shuffle=True)
+        with torch.inference_mode(), torch.autocast(device_type=self.device.type, dtype=self.amp_dtype, enabled=self.use_amp):
+            # No backward pass during eval, so memory pressure is far lower
+            # than training - use a bigger batch (matches the upper end of
+            # the trial's batch_size search space, which already has to fit
+            # during training) to cut down on kernel-launch overhead.
+            for inputs, labels in iterate_batches(X, y, batch_size=512, shuffle=False, drop_last=False):
+                inputs = inputs.to(memory_format=self.memory_format)
 
-        with torch.no_grad():  # disable gradient computation
-            for inputs, labels in train_loader:
-                inputs, labels = inputs.to(device), labels.to(device)
-                outputs = self.model(inputs)
-                _, predicted = torch.max(outputs, 1)  # get class with highest score
+                outputs = self.fwd(inputs)
+                predicted = outputs.argmax(1)
                 total += labels.size(0)
-                correct += (predicted == labels).sum().item()
+                correct += (predicted == labels).sum()
 
-        accuracy = 100 * correct / total
-        return accuracy
+        return (100 * correct / total).item()
 
     def save(self, path):
         torch.save(self.model.state_dict(), f"{path}")
 
     def load(self, path):
-        self.model.load_state_dict(torch.load(path))
+        map_location = "cuda"
+        self.model.load_state_dict(torch.load(path, map_location=map_location, weights_only=True))
