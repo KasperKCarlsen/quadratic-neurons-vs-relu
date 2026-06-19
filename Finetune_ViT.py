@@ -20,6 +20,7 @@ Usage:
 import os
 import glob
 import json
+import time
 import random
 import pickle
 import argparse
@@ -140,24 +141,33 @@ def set_seed(seed):
 
 def train_seed(model_key, kwargs, classes, grad_clip, best, batch_size, epochs,
                X_fit, y_fit, X_test, y_test, seed, seed_dir):
-    """Train one ViT from a fresh seed-dependent init; return its best test acc
-    and the per-epoch test-accuracy history (evaluated on the official test set)."""
+    """Train one ViT from a fresh seed-dependent init. Returns its best test acc,
+    the wall-clock seconds to reach that best, the epoch (0-indexed) it was
+    reached at, and the per-epoch test-accuracy history. model.test() syncs the
+    GPU, so the elapsed time accounts for queued CUDA work."""
     set_seed(seed)
     model = build_model(model_key, kwargs, classes, grad_clip)
     model.optimizer = build_optimizer(model, best)
 
     os.makedirs(seed_dir, exist_ok=True)
-    best_acc, accs = 0.0, {}
+    best_acc, best_time, best_epoch, accs = 0.0, 0.0, -1, {}
+    t0 = time.perf_counter()
     for epoch in range(epochs):
         model.train(X_fit, y_fit, batch_size, best["lr"], 1)
         acc = model.test(X_test, y_test)
         accs[epoch] = acc
-        if acc > best_acc:
+        improved = acc > best_acc
+        if improved:
             best_acc = acc
+            best_time = time.perf_counter() - t0
+            best_epoch = epoch
             model.save(f"{seed_dir}/best")
+        print(f"    [seed {seed}] epoch {epoch + 1}/{epochs}  "
+              f"test acc {acc:.2f}%  (best {best_acc:.2f}%)"
+              f"{'  *new best' if improved else ''}", flush=True)
     with open(f"{seed_dir}/accuracies.pkl", "wb") as f:
         pickle.dump(accs, f)
-    return best_acc, accs
+    return best_acc, best_time, best_epoch, accs
 
 
 def plot_seed_summary(config_name, accs_per_seed, mean_best, std_best):
@@ -250,17 +260,25 @@ def train_one(name_base, args, device):
     os.makedirs(out_dir, exist_ok=True)
 
     best_per_seed, accs_per_seed = {}, {}
+    time_per_seed, epoch_per_seed = {}, {}
     for seed in args.seeds:
-        acc, accs = train_seed(model_key, kwargs, classes, grad_clip, best,
-                               batch_size, args.epochs, X_fit, y_fit, X_test, y_test,
-                               seed, f"{out_dir}/seed{seed}")
+        acc, t_best, e_best, accs = train_seed(
+            model_key, kwargs, classes, grad_clip, best,
+            batch_size, args.epochs, X_fit, y_fit, X_test, y_test,
+            seed, f"{out_dir}/seed{seed}")
         best_per_seed[seed] = acc
         accs_per_seed[seed] = accs
-        print(f"  [seed {seed}] best test acc {acc:.4f}")
+        time_per_seed[seed] = t_best
+        epoch_per_seed[seed] = e_best
+        print(f"  [seed {seed}] best test acc {acc:.4f}"
+              f"  (reached in {t_best:.1f}s at epoch {e_best + 1})")
 
     vals = np.array(list(best_per_seed.values()), dtype=np.float64)
     mean = float(vals.mean())
     std = float(vals.std(ddof=1)) if len(vals) > 1 else 0.0
+    times = np.array(list(time_per_seed.values()), dtype=np.float64)
+    mean_time = float(times.mean())
+    std_time = float(times.std(ddof=1)) if len(times) > 1 else 0.0
     summary = {
         "hpo_best_value": study.best_value,
         "params": best,
@@ -271,10 +289,17 @@ def train_one(name_base, args, device):
         "best_acc_per_seed": {str(s): best_per_seed[s] for s in args.seeds},
         "mean": mean,
         "std": std,
+        # Benchmarking: wall-clock seconds to reach the best test acc, and the
+        # epoch (1-indexed) at which it was reached, per seed plus mean +/- std.
+        "time_to_best_per_seed": {str(s): time_per_seed[s] for s in args.seeds},
+        "best_epoch_per_seed": {str(s): epoch_per_seed[s] + 1 for s in args.seeds},
+        "mean_time_to_best": mean_time,
+        "std_time_to_best": std_time,
     }
     with open(f"{out_dir}/seed_results.json", "w") as f:
         json.dump(summary, f, indent=2)
     print(f"  -> {name_base}: {mean:.4f} +/- {std:.4f} over {len(vals)} seed(s)"
+          f"  | time-to-best {mean_time:.1f} +/- {std_time:.1f}s"
           f"  ({out_dir}/seed_results.json)")
     plot_seed_summary(name_base, accs_per_seed, mean, std)
 

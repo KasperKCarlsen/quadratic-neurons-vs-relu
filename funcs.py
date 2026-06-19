@@ -40,14 +40,22 @@ def get_classes_dataset(classes, X, y):
 
 
 
-def load_batch(path):
+def load_batch(path, label_key=b'labels'):
+    """Load one CIFAR pickle file into (images, labels) numpy arrays.
+
+    label_key selects the label field: CIFAR-10 stores b'labels', CIFAR-100
+    stores b'fine_labels' (and b'coarse_labels'). The sample count is inferred
+    with -1 rather than hardcoded, so this works for any file size - the
+    CIFAR-10 batches (10000 each), the CIFAR-100 train file (50000) and its
+    test file (10000) alike.
+    """
     with open(path, 'rb') as f:
         batch = pickle.load(f, encoding='bytes')
-        
-    images = batch[b'data']      # (10000, 3072)
-    labels = batch[b'labels']    # length 10000
 
-    images = images.reshape(10000, 3, 32, 32)
+    images = batch[b'data']        # (N, 3072)
+    labels = batch[label_key]      # length N
+
+    images = images.reshape(-1, 3, 32, 32)
     return images, np.array(labels)
 
 
