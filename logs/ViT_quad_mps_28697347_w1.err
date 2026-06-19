@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/zhome/99/4/216796/Fagprojekt/Train_ViT.py", line 163, in <module>
+    X, y = load_cifar(args.classes, args.dataset)
+  File "/zhome/99/4/216796/Fagprojekt/Train_ViT.py", line 113, in load_cifar
+    images, labels = load_batch(f"{cfg['dir']}/{fname}", label_key=cfg["label_key"])
+TypeError: load_batch() got an unexpected keyword argument 'label_key'
