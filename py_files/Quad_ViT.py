@@ -191,23 +191,38 @@ class Quad_adapters:
         return images
 
     def train(self, X, y, batch_size, lr, epochs):
-        loader = DataLoader(TensorDataset(X, y), batch_size=batch_size, shuffle=True)
         self.model.to(self.device)
         if self.optimizer is None:
             self.optimizer = torch.optim.Adam(
                 filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr)
         criterion = nn.CrossEntropyLoss()
 
+        # Changed with AI from here
+        # X, y are moved to device once, then indexed in whole batches with a
+        # GPU-resident permutation. This replaces DataLoader(TensorDataset(...)),
+        # which was indexing X/y one sample at a time -- each single-sample index
+        # into a GPU tensor is its own CUDA kernel launch, so a 40k-sample epoch
+        # was issuing tens of thousands of tiny GPU ops just to assemble batches.
+        X, y = X.to(self.device), y.to(self.device)
+        n = X.size(0)
+        amp_enabled = self.device.type == "cuda"
+
         for epoch in range(epochs):
             self.model.train()
             total, correct, loss_sum = 0, 0, 0
-            for images, labels in loader:
-                images, labels = images.to(self.device), labels.to(self.device)
+            perm = torch.randperm(n, device=self.device)
+            for start in range(0, n, batch_size):
+                idx = perm[start:start + batch_size]
+                images, labels = X[idx], y[idx]
                 images = self._resize(images)
 
                 self.optimizer.zero_grad()
-                outputs = self.model(pixel_values=images).logits
-                loss = criterion(outputs, labels)
+                # bf16 autocast: ~2-3x throughput on Ampere/Ada tensor cores (e.g.
+                # RTX 4070), no GradScaler needed since bf16 has fp32's exponent
+                # range (unlike fp16), so it doesn't underflow small gradients.
+                with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=amp_enabled):
+                    outputs = self.model(pixel_values=images).logits
+                    loss = criterion(outputs, labels)
                 loss.backward()
                 if self.grad_clip is not None:
                     torch.nn.utils.clip_grad_norm_(
@@ -218,19 +233,30 @@ class Quad_adapters:
                 loss_sum += loss.item() * labels.size(0)
                 correct += (outputs.argmax(1) == labels).sum().item()
                 total += labels.size(0)
+            # To here
             print(f"Epoch {epoch+1}/{epochs} | Loss: {loss_sum/total:.4f} | Acc: {correct/total:.4f}")
 
     def test(self, X, y):
         self.model.eval()
+        # Changed with AI from here
+        # Same fix as train(): batch via direct slicing of GPU-resident tensors
+        # instead of DataLoader(TensorDataset(...)), and use bf16 autocast since
+        # inference benefits from the same tensor-core speedup as training.
+        X, y = X.to(self.device), y.to(self.device)
+        n = X.size(0)
+        batch_size = 128
+        amp_enabled = self.device.type == "cuda"
         correct, total = 0, 0
-        loader = DataLoader(TensorDataset(X, y), batch_size=128)
         with torch.no_grad():
-            for inputs, labels in loader:
-                inputs, labels = inputs.to(self.device), labels.to(self.device)
+            for start in range(0, n, batch_size):
+                inputs = X[start:start + batch_size]
+                labels = y[start:start + batch_size]
                 inputs = self._resize(inputs)
-                outputs = self.model(pixel_values=inputs).logits
+                with torch.autocast(device_type=self.device.type, dtype=torch.bfloat16, enabled=amp_enabled):
+                    outputs = self.model(pixel_values=inputs).logits
                 total += labels.size(0)
                 correct += (outputs.argmax(1) == labels).sum().item()
+        # To here
         return 100 * correct / total
 
     def save(self, path):

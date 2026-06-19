@@ -13,6 +13,7 @@ Usage (single process):
     python Train_ViT.py --model ViT_quad --full --epoch 10 --n_trials 20
     python Train_ViT.py --model ViT_baseline --epoch 10 --n_trials 20
     python Train_ViT.py --model ViT_quad --full --dataset cifar100 --epoch 10 --n_trials 20
+    CUDA_VISIBLE_DEVICES=0 python Train_ViT.py --model ViT_quad --full --dataset cifar100 --epoch 2 --n_trials 3
 """
 
 import os
