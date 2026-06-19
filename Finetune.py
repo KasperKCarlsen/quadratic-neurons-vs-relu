@@ -56,11 +56,6 @@ MODEL_MAP = {
 }
 FROM_SCRATCH = (Quad_neuron, Baseline)  # the rest need a --load_path pretrained net
 
-# Hyperparameter keys the final-training pipeline actually applies. Anything else
-# in a params dict (e.g. an old study's relinear_ratio_*) is reported and ignored,
-# so a user is never misled into thinking a value took effect when it didn't.
-CONSUMED_PARAMS = {"optimizer", "lr", "weight_decay", "momentum", "batch_size"}
-
 # One config to finalize: where its params came from, plus enough to rebuild it.
 # hpo_value is the study's best_value, or None when params are fed in raw.
 Spec = namedtuple("Spec", "model relu num_blocks name_base params hpo_value")
@@ -204,19 +199,25 @@ def prepare_data(classes, test_split, device):
             X_test.to(device),  y_test.to(device))
 
 
-def build_optimizer(model, params):
-    """Rebuild the tuned optimizer from study.best_params. Mirrors the optimizer
-    setup in each model's constructor, but with fixed values instead of trial
-    suggestions. Filters to trainable params so it also works for adapter models."""
-    trainable = filter(lambda p: p.requires_grad, model.model.parameters())
-    name = params["optimizer"]
-    lr = params["lr"]
-    if name == "AdamW":
-        return torch.optim.AdamW(trainable, lr=lr,
-                                 weight_decay=params["weight_decay"], fused=model.use_amp)
-    if name == "SGD":
-        return torch.optim.SGD(trainable, lr=lr, momentum=params["momentum"])
-    return torch.optim.Adam(trainable, lr=lr, fused=model.use_amp)
+def build_model(model_class, relu, num_blocks, classes, load_path, best):
+    """Rebuild a model with exactly `best` as its hyperparameters.
+
+    Instead of re-deriving each model's optimizer here (which drifted out of sync
+    once Quad_neuron grew per-branch relinear_ratio_* learning rates and dropped
+    AdamW), we hand the constructor an optuna FixedTrial wrapping `best`. Every
+    `trial.suggest_*` call then returns the fixed value, so the model builds the
+    *same* optimizer it built during HPO - relinear param groups and all - with
+    no logic duplicated in this script. Extra keys in `best` (e.g. batch_size,
+    which is consumed separately) are simply never requested, hence ignored.
+    """
+    trial = optuna.trial.FixedTrial(best)
+    try:
+        if model_class in FROM_SCRATCH:
+            return model_class(relu, num_blocks, classes=classes, trial=trial)
+        return model_class(relu, num_blocks, load_path, classes=classes, trial=trial)
+    except ValueError as e:
+        # FixedTrial raises ValueError when a suggested param is absent from best.
+        raise SystemExit(f"params are missing a hyperparameter the model needs: {e}")
 
 
 def set_seed(seed):
@@ -238,12 +239,9 @@ def train_seed(model_class, relu, num_blocks, classes, best, batch_size,
     """Train one model from scratch for a single seed; return its best test acc."""
     set_seed(seed)
 
-    # Fresh random init (now seed-dependent); no trial -> we set the tuned optimizer.
-    if model_class in FROM_SCRATCH:
-        model = model_class(relu, num_blocks, classes=classes)
-    else:
-        model = model_class(relu, num_blocks, load_path, classes=classes)
-    model.optimizer = build_optimizer(model, best)
+    # Fresh random init (seed-dependent), with the tuned optimizer rebuilt from
+    # `best` inside the constructor via FixedTrial - see build_model.
+    model = build_model(model_class, relu, num_blocks, classes, load_path, best)
 
     os.makedirs(seed_dir, exist_ok=True)
     best_acc, accs = 0.0, {}
@@ -302,19 +300,12 @@ def plot_seed_summary(config_name, accs_per_seed, mean_best, std_best):
 
 
 def validate_params(name_base, best):
-    """Fail loudly on the few keys the pipeline genuinely needs, and warn (don't
-    fail) on keys it will silently ignore, so what actually takes effect is never
-    a mystery."""
+    """batch_size is the one hyperparameter this script consumes directly (it is
+    passed to model.train, not suggested in the constructor), so it must be
+    present. Every other key is validated by the model itself via FixedTrial in
+    build_model, which fails loudly if a needed one is missing."""
     if "batch_size" not in best:
         raise SystemExit(f"{name_base}: params are missing required 'batch_size'.")
-    opt = best.get("optimizer", "Adam")
-    if opt == "AdamW" and "weight_decay" not in best:
-        raise SystemExit(f"{name_base}: optimizer AdamW needs 'weight_decay'.")
-    if opt == "SGD" and "momentum" not in best:
-        raise SystemExit(f"{name_base}: optimizer SGD needs 'momentum'.")
-    ignored = sorted(set(best) - CONSUMED_PARAMS)
-    if ignored:
-        print(f"  [warn] params not applied by this pipeline (ignored): {ignored}")
 
 
 def train_one(spec, args, device):
