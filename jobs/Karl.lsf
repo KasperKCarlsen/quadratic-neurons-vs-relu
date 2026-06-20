@@ -1,0 +1,30 @@
+
+#     mkdir -p logs && bsub < submit_hpo_mps.lsf
+#BSUB -J quad_mps
+#BSUB -q gpuv100
+#BSUB -gpu "num=1:mode=exclusive_process:mps=yes" 
+#BSUB -n 4                                     
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=2GB]"                        
+#BSUB -W 10:00                                     
+#BSUB -B
+#BSUB -N
+#BSUB -u s234813@dtu.dk
+#BSUB -o ~//logs/.out
+#BSUB -e ~//job.err my_script.sh
+set -euo pipefail
+cd ~/Fagprojekt
+mkdir -p logs optuna_databases
+NUM_WORKERS=3
+
+pids=()
+for i in $(seq 1 "$NUM_WORKERS"); do
+    python Finetune.py \
+        --only "Quad_neuron_with_ReLU0arc(5_5_5)" \
+        --seeds 0 1 2 3 4 \
+        --epochs 200 \
+    pids+=($!)
+done
+
+
+# Workers are done; stop mirroring a
