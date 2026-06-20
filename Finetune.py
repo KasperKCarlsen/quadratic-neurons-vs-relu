@@ -105,10 +105,15 @@ def discover_studies():
 
 def load_study(name_base):
     """Reload a study from whichever backend produced it, journal (.log)
-    preferred over sqlite (.db) when both exist. The study name equals the file
-    stem. The journal is opened with an open()-based lock so reading works on
-    Windows without admin/Developer Mode (the default symlink lock raises
-    WinError 1314 there)."""
+    preferred over sqlite (.db) when both exist. The journal is opened with an
+    open()-based lock so reading works on Windows without admin/Developer Mode
+    (the default symlink lock raises WinError 1314 there).
+
+    The study name stored inside the file may differ from the filename - some
+    studies were saved with an extra filename tag (e.g. 'class'/'8class') that
+    was never written into the stored study_name. So the real name is resolved
+    from the storage instead of assuming it equals the stem. Each file holds one
+    study, so when the stem doesn't match we take that single study's name."""
     log_path = f"optuna_databases/{name_base}.log"
     db_path = f"optuna_databases/{name_base}.db"
     if os.path.exists(log_path):
@@ -120,7 +125,16 @@ def load_study(name_base):
         storage = f"sqlite:///{db_path}"
     else:
         raise FileNotFoundError(f"No .log or .db storage for study {name_base!r}")
-    return optuna.load_study(study_name=name_base, storage=storage)
+
+    names = optuna.get_all_study_names(storage)
+    if name_base in names:
+        study_name = name_base
+    elif len(names) == 1:
+        study_name = names[0]
+    else:
+        raise SystemExit(
+            f"{name_base!r}: can't pick a study - file contains {names}.")
+    return optuna.load_study(study_name=study_name, storage=storage)
 
 
 def parse_params(src):
@@ -354,7 +368,12 @@ def validate_params(name_base, best):
 
 def train_one(spec, args, device):
     model_name, relu, num_blocks, name_base, best, hpo_value = spec
-    save_dir = f"models/{model_name}_ReLU{relu}_arc_{num_blocks}"
+    # Key every path on the FULL study name (name_base), not a
+    # {model}_ReLU{relu}_arc_{num_blocks} reconstruction. The reconstruction
+    # drops any tag the study name carried (e.g. 'class'/'8class'), so two
+    # distinct studies that share an architecture would otherwise write to the
+    # same Done_models dir and silently overwrite each other.
+    save_dir = f"models/{name_base}"
 
     model_class = MODEL_MAP[model_name]
     if model_class not in FROM_SCRATCH and args.load_path is None:
@@ -383,7 +402,7 @@ def train_one(spec, args, device):
         X_fit = torch.cat([X_train, X_val]); y_fit = torch.cat([y_train, y_val])
     else:
         X_fit, y_fit = X_train, y_train
-    out_dir = f"Done_models/{model_name}_ReLU{relu}_arc_{num_blocks}"
+    out_dir = f"Done_models/{name_base}"
     os.makedirs(out_dir, exist_ok=True)
 
     best_per_seed, accs_per_seed = {}, {}
@@ -427,8 +446,7 @@ def train_one(spec, args, device):
           f"  | time-to-best {mean_time:.1f} +/- {std_time:.1f}s"
           f"  ({out_dir}/seed_results.json)")
 
-    config_name = f"{model_name}_ReLU{relu}_arc_{num_blocks}"
-    plot_seed_summary(config_name, accs_per_seed, mean, std)
+    plot_seed_summary(name_base, accs_per_seed, mean, std)
 
 
 def specs_from_studies(args):
