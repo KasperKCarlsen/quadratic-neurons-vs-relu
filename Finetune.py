@@ -64,47 +64,63 @@ Spec = namedtuple("Spec", "model relu num_blocks name_base params hpo_value")
 
 
 def parse_name_base(name_base):
-    """Recover (model, relu, num_blocks) from a study name_base. Mirrors the
-    name_base Train_Model.py encodes into its storage filename:
-        {model}_with_ReLU{relu}_arc_{num_blocks}
+    """Recover (model, relu, num_blocks) from a study name_base of the form
+        {model}_with_ReLU{relu}_arc_{arch}
+    where {arch} encodes the blocks-per-stage. The architecture is read with a
+    digit regex so every spelling the train scripts have used parses the same:
+        _arc_(3_3_3)   _arc_[3, 3, 3]   _arc_3-3-3   -> [3, 3, 3]
+    (a plain ast.literal_eval is unsafe here - "(3_3_3)" evaluates to the int
+    333, since underscores are Python digit-group separators).
+    Raises ValueError if the name isn't in this form (e.g. a ViT study), which
+    discover_studies relies on to skip non-ResNet files.
     """
     model, rest = name_base.split("_with_ReLU", 1)
     relu_str, arc_str = rest.split("_arc_", 1)
-    return model, int(relu_str), ast.literal_eval(arc_str)
+    num_blocks = [int(n) for n in re.findall(r"\d+", arc_str)]
+    if not num_blocks:
+        raise ValueError(f"no architecture digits in {name_base!r}")
+    return model, int(relu_str), num_blocks
 
 
 def discover_studies():
-    """Every study name_base under optuna_databases/, from either backend:
-    sqlite (*_study.db) or Optuna journal (*_study.log). The '_study.<ext>'
-    suffix is stripped so the two backends collapse to the same name_base."""
-    paths = (glob.glob("optuna_databases/*_study.db")
-             + glob.glob("optuna_databases/*_study.log"))
+    """Every ResNet study under optuna_databases/, from either backend: Optuna
+    journal (.log) or sqlite (.db). The file stem IS the study name (matching how
+    the train scripts and Finetune_ViT.py name them). Files whose stem doesn't
+    parse as a known '{model}_with_ReLU..._arc_...' config - e.g. the ViT
+    studies - are skipped, so this stays specific to the ResNet models here."""
+    paths = glob.glob("optuna_databases/*.log") + glob.glob("optuna_databases/*.db")
     name_bases = set()
     for p in paths:
-        base = os.path.basename(p)
-        for suf in ("_study.db", "_study.log"):
-            if base.endswith(suf):
-                name_bases.add(base[: -len(suf)])
-                break
+        nb = os.path.splitext(os.path.basename(p))[0]
+        if nb.endswith("_study"):          # tolerate the legacy '..._study.db' form
+            nb = nb[: -len("_study")]
+        try:
+            model, _, _ = parse_name_base(nb)
+        except ValueError:
+            continue                       # not a ResNet study (e.g. ViT) -> skip
+        if model in MODEL_MAP:
+            name_bases.add(nb)
     return sorted(name_bases)
 
 
-def load_study(model, relu, name_base):
+def load_study(name_base):
     """Reload a study from whichever backend produced it, journal (.log)
-    preferred over sqlite (.db) when both exist. Study name matches the one
-    Train_Model.py created: '{model}_with_ReLU{relu}_optimization'."""
-    log_path = f"optuna_databases/{name_base}_study.log"
-    db_path = f"optuna_databases/{name_base}_study.db"
+    preferred over sqlite (.db) when both exist. The study name equals the file
+    stem. The journal is opened with an open()-based lock so reading works on
+    Windows without admin/Developer Mode (the default symlink lock raises
+    WinError 1314 there)."""
+    log_path = f"optuna_databases/{name_base}.log"
+    db_path = f"optuna_databases/{name_base}.db"
     if os.path.exists(log_path):
         from optuna.storages import JournalStorage
-        from optuna.storages.journal import JournalFileBackend
-        storage = JournalStorage(JournalFileBackend(log_path))
+        from optuna.storages.journal import JournalFileBackend, JournalFileOpenLock
+        storage = JournalStorage(
+            JournalFileBackend(log_path, lock_obj=JournalFileOpenLock(log_path)))
     elif os.path.exists(db_path):
         storage = f"sqlite:///{db_path}"
     else:
         raise FileNotFoundError(f"No .log or .db storage for study {name_base!r}")
-    return optuna.load_study(
-        study_name=f"{model}_with_ReLU{relu}_optimization", storage=storage)
+    return optuna.load_study(study_name=name_base, storage=storage)
 
 
 def parse_params(src):
@@ -426,7 +442,7 @@ def specs_from_studies(args):
     specs = []
     for nb in name_bases:
         model, relu, num_blocks = parse_name_base(nb)
-        study = load_study(model, relu, nb)
+        study = load_study(nb)
         specs.append(Spec(model, relu, num_blocks, nb, study.best_params,
                           study.best_value))
     return specs
