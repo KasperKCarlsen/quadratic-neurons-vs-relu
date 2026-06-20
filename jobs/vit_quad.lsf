@@ -1,7 +1,7 @@
 #!/bin/bash
 #     mkdir -p logs && bsub < submit_vit_hpo_mps.lsf
 #BSUB -J ViT_quad_full
-#BSUB -q gpuv100
+#BSUB -q gpua100
 #BSUB -gpu "num=1:mode=exclusive_process:mps=yes"
 #BSUB -n 4
 #BSUB -R "span[hosts=1]"
@@ -16,13 +16,13 @@ set -euo pipefail
 cd ~/Fagprojekt
 mkdir -p logs optuna_databases
 # ---- experiment config (edit these) ---------------------------------
-NUM_WORKERS=1
+NUM_WORKERS=2
 DATASET=cifar100
 MODEL=ViT_quad            # ViT_quad | ViT_baseline
 FULL_ARG=--full           # --full (cross-term) | --no-full (reduced). ViT_quad only.
 FREEZE_ARG=               # set to --freeze_qv_linear for the matched-ablation baseline; else leave empty
 EPOCHS=10                 # ViT finetuning converges fast
-TRIALS_PER_WORKER=2
+TRIALS_PER_WORKER=10
 GRAD_CLIP=1.0
 
 # ---------------------------------------------------------------------
