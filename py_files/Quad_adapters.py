@@ -24,33 +24,39 @@ class LambdaLayer(nn.Module):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, relu, stride=1, option="A"):
+    def __init__(self, in_planes, planes, relu, stride=1, option="A", quadratic=True):
         super().__init__()
         self.relu = relu
+        self.quadratic = quadratic
 
         self.conv1r = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
         init.kaiming_normal_(self.conv1r.weight)
 
-        self.conv1g = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
-        self.conv1g.weight.data.fill_(0)
-        self.conv1g.bias.data.fill_(1)
+        # The g (gate) and b (square) branches are the actual quadratic
+        # adapters. Only build them when this block is quadratic - a linear
+        # block is just conv1r -> bn -> (relu).
+        if self.quadratic:
+            self.conv1g = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
+            self.conv1g.weight.data.fill_(0)
+            self.conv1g.bias.data.fill_(1)
 
-        self.conv1b = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
-        self.conv1b.weight.data.fill_(0)
-        self.conv1b.bias.data.fill_(0)
+            self.conv1b = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
+            self.conv1b.weight.data.fill_(0)
+            self.conv1b.bias.data.fill_(0)
 
         self.bn1 = nn.BatchNorm2d(planes)
 
         self.conv2r = nn.Conv2d(planes, planes, 3, 1, 1, bias=True)
         init.kaiming_normal_(self.conv2r.weight)
 
-        self.conv2g = nn.Conv2d(planes, planes, 3, 1, 1, bias=True)
-        self.conv2g.weight.data.fill_(0)
-        self.conv2g.bias.data.fill_(1)
+        if self.quadratic:
+            self.conv2g = nn.Conv2d(planes, planes, 3, 1, 1, bias=True)
+            self.conv2g.weight.data.fill_(0)
+            self.conv2g.bias.data.fill_(1)
 
-        self.conv2b = nn.Conv2d(planes, planes, 3, 1, 1, bias=True)
-        self.conv2b.weight.data.fill_(0)
-        self.conv2b.bias.data.fill_(0)
+            self.conv2b = nn.Conv2d(planes, planes, 3, 1, 1, bias=True)
+            self.conv2b.weight.data.fill_(0)
+            self.conv2b.bias.data.fill_(0)
 
         self.bn2 = nn.BatchNorm2d(planes)
 
@@ -64,12 +70,19 @@ class BasicBlock(nn.Module):
 
     def forward(self, x):
 
-        out = self.bn1(self.conv1r(x) * self.conv1g(x) + self.conv1b(x.pow(2)))
+        if self.quadratic:
+            out = self.bn1(self.conv1r(x) * self.conv1g(x) + self.conv1b(x.pow(2)))
+        else:
+            out = self.bn1(self.conv1r(x))
 
         if self.relu == 2:
             out = F.relu(out)
 
-        out = self.bn2(self.conv2r(out) * self.conv2g(out) + self.conv2b(out.pow(2)))
+        if self.quadratic:
+            out = self.bn2(self.conv2r(out) * self.conv2g(out) + self.conv2b(out.pow(2)))
+        else:
+            out = self.bn2(self.conv2r(out))
+
         out += self.shortcut(x)
 
         if self.relu in [1, 2]:
@@ -79,12 +92,29 @@ class BasicBlock(nn.Module):
 
 
 class QResNet(nn.Module):
-    def __init__(self, relu, block, num_blocks, classes):
+    def __init__(self, relu, block, num_blocks, classes, quad_layers="last"):
         super().__init__()
 
         self.relu = relu
         self.in_planes = 16
         self.classes = classes
+
+        # Decide which residual blocks carry the quadratic branches.
+        #   "last" -> only the final block of the whole network (default)
+        #   "all"  -> every block (original behaviour)
+        #   iterable of ints -> the listed global block indices
+        total_blocks = sum(num_blocks)
+        if quad_layers == "last":
+            self.quad_mask = [i == total_blocks - 1 for i in range(total_blocks)]
+        elif quad_layers == "all":
+            self.quad_mask = [True] * total_blocks
+        elif isinstance(quad_layers, (list, tuple, set)):
+            quad_set = set(quad_layers)
+            self.quad_mask = [i in quad_set for i in range(total_blocks)]
+        else:
+            raise ValueError(f"Unrecognised quad_layers: {quad_layers!r}")
+
+        self._block_idx = 0  # running counter used while building the layers
 
         self.conv1 = nn.Conv2d(3, 16, 3, 1, 1, bias=False)
         self.bn1 = nn.BatchNorm2d(16)
@@ -100,8 +130,10 @@ class QResNet(nn.Module):
         layers = []
 
         for s in strides:
-            layers.append(block(self.in_planes, planes, self.relu, s))
+            quadratic = self.quad_mask[self._block_idx]
+            layers.append(block(self.in_planes, planes, self.relu, s, quadratic=quadratic))
             self.in_planes = planes
+            self._block_idx += 1
 
         return nn.Sequential(*layers)
 
@@ -132,8 +164,9 @@ class Quad_adapters:
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         trial=None,
         amp_dtype="bf16",
+        quad_layers="last",
     ):
-        self.model = QResNet(Relu, block, num_blocks, classes)
+        self.model = QResNet(Relu, block, num_blocks, classes, quad_layers=quad_layers)
 
         # Cached: this constructor runs once per Optuna trial, and re-reading
         # the same checkpoint from disk every trial is pure overhead.
@@ -142,7 +175,9 @@ class Quad_adapters:
         # Filter out mismatched layers
         model_dict = self.model.state_dict()
 
-        # Only keep pretrained layers that match in shape
+        # Only keep pretrained layers that match in shape. Linear blocks no
+        # longer have conv*g / conv*b keys, so those entries are simply absent
+        # from model_dict and get dropped here automatically.
         pretrained_dict_filtered = {
             k: v
             for k, v in pretrained_dict.items()
@@ -176,20 +211,11 @@ class Quad_adapters:
 
         if self.trial is not None:
             self.optimizer_name = self.trial.suggest_categorical(
-                "optimizer", ["Adam", "AdamW", "SGD"]
+                "optimizer", ["Adam", "SGD"]
             )
             self.lr = self.trial.suggest_float("lr", 1e-6, 1e-2, log=True)
-            if self.optimizer_name == "AdamW":
-                self.weight_decay = self.trial.suggest_float(
-                    "weight_decay", 1e-5, 1e-1, log=True
-                )
-                self.optimizer = torch.optim.AdamW(
-                    filter(lambda p: p.requires_grad, self.model.parameters()),
-                    lr=self.lr,
-                    weight_decay=self.weight_decay,
-                    fused=self.use_amp,
-                )
-            elif self.optimizer_name == "SGD":
+
+            if self.optimizer_name == "SGD":
                 self.momentum = self.trial.suggest_float("momentum", 0.5, 0.99)
                 self.optimizer = torch.optim.SGD(
                     filter(lambda p: p.requires_grad, self.model.parameters()),
@@ -208,27 +234,8 @@ class Quad_adapters:
             self.optimizer = None
 
     def train(self, X, y, batch_size, lr, epochs):
-        # X/y already live on self.device (loaded resident once in
-        # Train_Model.py) - iterate_batches indexes batches straight out of
-        # them, skipping DataLoader/TensorDataset collation, pinning and the
-        # per-batch host->device copy entirely.
 
-        # Only optimize parameters that require gradients
-        if self.optimizer is None:
-            self.optimizer = torch.optim.Adam(
-                filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr
-            )
-
-        # Verify what's being trained
-        trainable_params = sum(
-            p.numel() for p in self.model.parameters() if p.requires_grad
-        )
-        total_params = sum(p.numel() for p in self.model.parameters())
-
-
-        acc_train = {}
-        loss_train = {}
-        for epoch in range(epochs):
+        for _ in range(epochs):
             self.model.train()
             # Accumulate on-device and only sync to the CPU once per epoch -
             # calling .item() inside the loop forces a CUDA sync every batch.
