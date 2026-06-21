@@ -42,7 +42,6 @@ parser.add_argument(
     "--ReLU",
     type=int,
     choices=[0, 1, 2],
-    required=True,
     help="0: no ReLU, 1: between layers only, 2: between layers and inside neurons",
 )
 parser.add_argument("--epoch", type=int, required=True)

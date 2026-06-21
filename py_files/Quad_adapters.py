@@ -122,7 +122,7 @@ class QResNet(nn.Module):
 
         for s in strides:
             quadratic = self.quad_mask[self._block_idx]
-            layers.append(block(self.in_planes, planes, self.relu, s, quadratic=quadratic))
+            layers.append(block(self.in_planes, planes, s, quadratic=quadratic))
             self.in_planes = planes
             self._block_idx += 1
 
