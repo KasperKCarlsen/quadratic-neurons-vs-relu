@@ -388,9 +388,13 @@ def train_one(spec, args, device):
     validate_params(name_base, best)
     batch_size = best["batch_size"]
 
-    # Reuse this run's original classes / split if recorded.
+    # Reuse this run's original classes / split if recorded. --num-classes (when
+    # given) overrides the recorded classes with the first N CIFAR-10 classes,
+    # so you can finalize on a different class count than HPO searched over.
     run_args = load_run_args(save_dir)
     classes = getattr(run_args, "classes", list(range(10)))
+    if args.num_classes is not None:
+        classes = list(range(args.num_classes))
     val = getattr(run_args, "val", True)
     test_split = getattr(run_args, "test_split", 0.2)
 
@@ -494,6 +498,10 @@ if __name__ == "__main__":
                         help="Pretrained checkpoint for adapter models (LoRA / Quad_adapters).")
     parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4],
                         help="Seeds to train across; results reported as mean +/- std.")
+    parser.add_argument("--num-classes", dest="num_classes", type=int, default=None,
+                        help="Number of CIFAR-10 classes to train on (uses classes "
+                             "0..N-1). Overrides the classes recorded by Train_Model.py; "
+                             "if omitted, the recorded classes are used (default all 10).")
     parser.add_argument("--refit-full", dest="refit_full", action="store_true",
                         help="Refit final models on train+val (hyperparameters fixed) "
                              "before evaluating on the official test set.")

@@ -1,0 +1,25 @@
+{
+  "hpo_best_value": 85.88999938964844,
+  "params": {
+    "optimizer": "Adam",
+    "lr": 0.005248309819078663,
+    "batch_size": 69
+  },
+  "epochs": 200,
+  "seeds": [
+    0
+  ],
+  "best_acc_per_seed": {
+    "0": 82.82499694824219
+  },
+  "mean": 82.82499694824219,
+  "std": 0.0,
+  "time_to_best_per_seed": {
+    "0": 2444.1393420999993
+  },
+  "best_epoch_per_seed": {
+    "0": 200
+  },
+  "mean_time_to_best": 2444.1393420999993,
+  "std_time_to_best": 0.0
+}
