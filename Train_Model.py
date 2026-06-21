@@ -111,8 +111,6 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     else:
         model = model_class(args.num_blocks, args.load_path, classes=args.classes, trial=trial, amp_dtype=args.amp_dtype)
 
-    if model_class not in (LoRA, Quad_adapters) and args.load_path is not None:
-        model.load(args.load_path)
 
 
     trial_dir = f"{save_dir}/trial{trial.number}"
