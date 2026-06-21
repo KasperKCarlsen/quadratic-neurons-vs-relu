@@ -1,11 +1,11 @@
 #!/bin/bash
 #     mkdir -p logs && bsub < submit_hpo_mps.lsf
 #BSUB -J quad_mps
-#BSUB -q gpua100
+#BSUB -q gpuv100
 #BSUB -gpu "num=1:mode=exclusive_process:mps=yes" 
 #BSUB -n 4                                     
 #BSUB -R "span[hosts=1]"
-#BSUB -R "rusage[mem=3GB]"                        
+#BSUB -R "rusage[mem=2GB]"                        
 #BSUB -W 16:00                                     
 #BSUB -B
 #BSUB -N
@@ -17,14 +17,13 @@ cd ~/Fagprojekt
 mkdir -p logs optuna_databases
 # ---- experiment config (edit these) ---------------------------------
 NUM_WORKERS=3
-MODEL=Quad_neuron
-RELU=0
-BLOCKS=(18 18 18)                
+MODEL=Quad_adapters
+BLOCKS=(3 3 3)                
 EPOCHS=150
 TOTAL_TRIALS=20
-AMP_DTYPE=bf16               # bf16 = A100/Ampere default. Set to fp16 for THIS cluster's gpuv100 queue (Volta has no hardware bf16); fp16 auto-enables a GradScaler. 'off' = fp32.
+AMP_DTYPE=off               # bf16 = A100/Ampere default. Set to fp16 for THIS cluster's gpuv100 queue (Volta has no hardware bf16); fp16 auto-enables a GradScaler. 'off' = fp32.
 CLASSES=(0 1 2 3 4 5 6 7 8 9) 
-LOAD_PATH=""                
+LOAD_PATH="models/Baseline_with_ReLU2_arc_(3_3_3)/seed0/best"                
 # ---------------------------------------------------------------------
 # Quad_adapters and LoRA adapt a pretrained Baseline and will error without a
 # checkpoint; fail fast here rather than after queueing + launching workers.
@@ -62,7 +61,6 @@ pids=()
 for i in $(seq 1 "$NUM_WORKERS"); do
     python Train_Model.py \
         --model "$MODEL" \
-        --ReLU "$RELU" \
         --num_blocks "${BLOCKS[@]}" \
         --classes "${CLASSES[@]}" \
         --epoch "$EPOCHS" \

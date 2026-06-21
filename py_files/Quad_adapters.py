@@ -24,9 +24,8 @@ class LambdaLayer(nn.Module):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, relu, stride=1, option="A", quadratic=True):
+    def __init__(self, in_planes, planes, stride=1, quadratic=True):
         super().__init__()
-        self.relu = relu
         self.quadratic = quadratic
 
         self.conv1r = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
@@ -70,32 +69,24 @@ class BasicBlock(nn.Module):
 
     def forward(self, x):
 
-        if self.quadratic:
-            out = self.bn1(self.conv1r(x) * self.conv1g(x) + self.conv1b(x.pow(2)))
-        else:
-            out = self.bn1(self.conv1r(x))
+        
+        out = self.bn1(self.conv1r(x) * self.conv1g(x) + self.conv1b(x.pow(2)))
+                
+        out = F.relu(out)
 
-        if self.relu == 2:
-            out = F.relu(out)
-
-        if self.quadratic:
-            out = self.bn2(self.conv2r(out) * self.conv2g(out) + self.conv2b(out.pow(2)))
-        else:
-            out = self.bn2(self.conv2r(out))
+        out = self.bn2(self.conv2r(out) * self.conv2g(out) + self.conv2b(out.pow(2)))
 
         out += self.shortcut(x)
 
-        if self.relu in [1, 2]:
-            out = F.relu(out)
+        out = F.relu(out)
 
         return out
 
 
 class QResNet(nn.Module):
-    def __init__(self, relu, block, num_blocks, classes, quad_layers="last"):
+    def __init__(self, block, num_blocks, classes, quad_layers="last"):
         super().__init__()
 
-        self.relu = relu
         self.in_planes = 16
         self.classes = classes
 
@@ -138,10 +129,8 @@ class QResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        if self.relu == 0:
-            out = self.bn1(self.conv1(x))
-        else:
-            out = F.relu(self.bn1(self.conv1(x)))
+
+        out = F.relu(self.bn1(self.conv1(x)))
 
         out = self.layer1(out)
         out = self.layer2(out)
@@ -157,7 +146,6 @@ class Quad_adapters:
 
     def __init__(
         self,
-        Relu,
         num_blocks,
         pretrained_path,
         block=BasicBlock,
@@ -166,7 +154,7 @@ class Quad_adapters:
         amp_dtype="bf16",
         quad_layers="last",
     ):
-        self.model = QResNet(Relu, block, num_blocks, classes, quad_layers=quad_layers)
+        self.model = QResNet(block, num_blocks, classes, quad_layers=quad_layers)
 
         # Cached: this constructor runs once per Optuna trial, and re-reading
         # the same checkpoint from disk every trial is pure overhead.

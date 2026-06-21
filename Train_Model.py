@@ -15,9 +15,7 @@ from py_files.Quad_adapters import Quad_adapters
 from py_files.Baseline import Baseline
 from py_files.Baseline_with_LoRA import LoRA
 
-# Speed up convolutions for the fixed CIFAR-10 input size and let matmuls use
-# TF32 on Ampere+ GPUs (e.g. the A100 nodes the .lsf jobs run on) - both are
-# free wins that don't change the trained model architecture.
+#exemple python Train_Model.py --model Quad_adapters --num_blocks 3 3 3 --classes 0 1 2 3 4 5 6 7 8 9 --epoch 5 --total_trials 5
 torch.backends.cudnn.benchmark = True
 torch.set_float32_matmul_precision("high")
 
@@ -112,7 +110,7 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     if model_class in (Quad_neuron, Baseline):
         model = model_class(args.ReLU, args.num_blocks, classes=args.classes, trial=trial, amp_dtype=args.amp_dtype)
     else:
-        model = model_class(args.ReLU, args.num_blocks, args.load_path, classes=args.classes, trial=trial, amp_dtype=args.amp_dtype)
+        model = model_class(args.num_blocks, args.load_path, classes=args.classes, trial=trial, amp_dtype=args.amp_dtype)
 
     if model_class not in (LoRA, Quad_adapters) and args.load_path is not None:
         model.load(args.load_path)
@@ -255,9 +253,7 @@ if __name__ == "__main__":
 
     study.optimize(
         lambda trial: objective(trial, args, save_dir, X_train, y_train, X_test, y_test),
-        n_trials=None,
-        callbacks=[MaxTrialsCallback(args.total_trials,states=(TrialState.COMPLETE, TrialState.PRUNED),
-    )],
+        n_trials=args.total_trials,
     )
 
     pruned_trials = study.get_trials(deepcopy=False, states=[TrialState.PRUNED])
