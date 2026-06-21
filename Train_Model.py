@@ -102,6 +102,10 @@ def build_storage(backend, name_base):
         from optuna.storages import JournalStorage
         from optuna.storages.journal import JournalFileBackend
         return JournalStorage(JournalFileBackend(f"optuna_databases/{name_base}.log"))
+    # default: sqlite, fine for a single process. Returning a URL string (not
+    # None) is what actually persists the study to disk and lets load_if_exists
+    # resume it; without this the study would silently run in-memory.
+    return f"sqlite:///optuna_databases/{name_base}.db"
 
 
 def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
@@ -149,6 +153,14 @@ def objective(trial, args, save_dir, X_train, y_train, X_test, y_test):
     # last epoch. Revert to `return acc` if you want last-epoch se
 if __name__ == "__main__":
     args = parser.parse_args()
+
+    # Quad_adapters/LoRA adapt a pretrained Baseline checkpoint; without one
+    # they'd hit torch.load(None) deep inside the first trial. Fail fast.
+    if args.model in ("Quad_adapters", "LoRA"):
+        if not args.load_path:
+            parser.error(f"--model {args.model} requires --load_path (a pretrained Baseline checkpoint)")
+        if not os.path.isfile(args.load_path):
+            parser.error(f"--load_path '{args.load_path}' not found")
 
 
     X = []

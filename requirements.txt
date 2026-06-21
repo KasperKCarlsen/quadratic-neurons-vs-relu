@@ -1,0 +1,11 @@
+# Python deps for Train_Model.py (LoRA / Quad_adapters / Baseline HPO).
+# torch>=2.1 is required: the code uses the torch.amp.GradScaler("cuda") API,
+# torch.inference_mode, channels_last and fused optimizers, all of which need
+# a modern (>=2.0) PyTorch. Install the CUDA build that matches the cluster's
+# driver (see install notes) BEFORE installing the rest of this file, or pin
+# the +cuXXX wheel via --extra-index-url.
+torch>=2.1
+torchvision>=0.16
+numpy>=1.24
+optuna>=3.4
+pandas>=2.0

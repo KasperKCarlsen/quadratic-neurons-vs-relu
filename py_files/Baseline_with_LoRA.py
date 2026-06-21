@@ -8,7 +8,6 @@ import torchvision
 import torchvision.transforms as transforms
 import pickle
 import numpy as np
-import loralib as lora
 import math
 
 from funcs import load_checkpoint, iterate_batches, resolve_amp_dtype
@@ -39,9 +38,10 @@ class LoRALayer(nn.Module):
         self.lora_A = nn.Parameter(torch.zeros(rank, in_features))
         self.lora_B = nn.Parameter(torch.zeros(out_features, rank))
 
-        # Initialize
+        # Initialize. A non-zero, B zero (see LoRAConv2d) so the increment
+        # starts at 0 but the adapter can actually learn.
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-        nn.init.zeros_(self.lora_A)
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B)
 
     def forward(self, x):
@@ -92,8 +92,11 @@ class LoRAConv2d(nn.Module):
             rank, out_channels, 1, bias=False
         )  # 1x1 conv to combine
 
-        # Initialize LoRA layers
-        nn.init.zeros_(self.lora_A.weight)
+        # Initialize LoRA layers. A must be NON-zero or gradients to both A and
+        # B stay zero (grad wrt A is B^T@grad, grad wrt B is grad@A(x)); zeroing
+        # both freezes the adapter forever. Standard LoRA: A random, B zero, so
+        # the initial increment B(A(x)) is still 0 but gradients can flow.
+        nn.init.kaiming_uniform_(self.lora_A.weight, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B.weight)
 
     def forward(self, x):
