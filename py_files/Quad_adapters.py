@@ -24,38 +24,32 @@ class LambdaLayer(nn.Module):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, stride=1, quadratic=True):
+    def __init__(self, in_planes, planes, stride=1):
         super().__init__()
-        self.quadratic = quadratic
 
         self.conv1r = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
         init.kaiming_normal_(self.conv1r.weight)
 
-        # The g (gate) and b (square) branches are the actual quadratic
-        # adapters. Only build them when this block is quadratic - a linear
-        # block is just conv1r -> bn -> (relu).
-        if self.quadratic:
-            self.conv1g = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
-            self.conv1g.weight.data.fill_(0)
-            self.conv1g.bias.data.fill_(1)
+        self.conv1g = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
+        self.conv1g.weight.data.fill_(0)
+        self.conv1g.bias.data.fill_(1)
 
-            self.conv1b = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
-            self.conv1b.weight.data.fill_(0)
-            self.conv1b.bias.data.fill_(0)
+        self.conv1b = nn.Conv2d(in_planes, planes, 3, stride, 1, bias=True)
+        self.conv1b.weight.data.fill_(0)
+        self.conv1b.bias.data.fill_(0)
 
         self.bn1 = nn.BatchNorm2d(planes)
 
         self.conv2r = nn.Conv2d(planes, planes, 3, 1, 1, bias=True)
         init.kaiming_normal_(self.conv2r.weight)
 
-        if self.quadratic:
-            self.conv2g = nn.Conv2d(planes, planes, 3, 1, 1, bias=True)
-            self.conv2g.weight.data.fill_(0)
-            self.conv2g.bias.data.fill_(1)
+        self.conv2g = nn.Conv2d(planes, planes, 3, 1, 1, bias=True)
+        self.conv2g.weight.data.fill_(0)
+        self.conv2g.bias.data.fill_(1)
 
-            self.conv2b = nn.Conv2d(planes, planes, 3, 1, 1, bias=True)
-            self.conv2b.weight.data.fill_(0)
-            self.conv2b.bias.data.fill_(0)
+        self.conv2b = nn.Conv2d(planes, planes, 3, 1, 1, bias=True)
+        self.conv2b.weight.data.fill_(0)
+        self.conv2b.bias.data.fill_(0)
 
         self.bn2 = nn.BatchNorm2d(planes)
 
@@ -69,17 +63,12 @@ class BasicBlock(nn.Module):
 
     def forward(self, x):
 
-        if self.quadratic:
-            out = self.bn1(self.conv1r(x) * self.conv1g(x) + self.conv1b(x.pow(2)))
-        else:
-            out = self.bn1(self.conv1r(x))
-
+        
+        out = self.bn1(self.conv1r(x) * self.conv1g(x) + self.conv1b(x.pow(2)))
+                
         out = F.relu(out)
 
-        if self.quadratic:
-            out = self.bn2(self.conv2r(out) * self.conv2g(out) + self.conv2b(out.pow(2)))
-        else:
-            out = self.bn2(self.conv2r(out))
+        out = self.bn2(self.conv2r(out) * self.conv2g(out) + self.conv2b(out.pow(2)))
 
         out += self.shortcut(x)
 
@@ -126,8 +115,7 @@ class QResNet(nn.Module):
         layers = []
 
         for s in strides:
-            quadratic = self.quad_mask[self._block_idx]
-            layers.append(block(self.in_planes, planes, s, quadratic=quadratic))
+            layers.append(block(self.in_planes, planes, s))
             self.in_planes = planes
             self._block_idx += 1
 
