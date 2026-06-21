@@ -117,9 +117,8 @@ class LoRAConv2d(nn.Module):
 class BasicBlockLoRA(nn.Module):
     expansion = 1
 
-    def __init__(self, in_planes, planes, relu, stride=1, option="A", rank=4):
+    def __init__(self, in_planes, planes, stride=1, rank=4):
         super().__init__()
-        self.relu = relu
 
         self.conv1r = LoRAConv2d(in_planes, planes, 3, stride, 1, bias=True, rank=rank)
         self.bn1 = nn.BatchNorm2d(planes)
@@ -138,14 +137,13 @@ class BasicBlockLoRA(nn.Module):
     def forward(self, x):
         out = self.bn1(self.conv1r(x))
 
-        if self.relu == 2:
-            out = F.relu(out)
+
+        out = F.relu(out)
 
         out = self.bn2(self.conv2r(out))
         out += self.shortcut(x)
 
-        if self.relu in [1, 2]:
-            out = F.relu(out)
+        out = F.relu(out)
 
         return out
 
@@ -155,9 +153,8 @@ class BasicBlockLoRA(nn.Module):
 # checkpoint it adapts, but every conv is a LoRAConv2d (frozen original +
 # trainable low-rank increment).
 class QResNetLoRA(nn.Module):
-    def __init__(self, relu, block, num_blocks, classes, rank=4):
+    def __init__(self, block, num_blocks, classes, rank=4):
         super().__init__()
-        self.relu = relu
         self.in_planes = 16
         self.classes = classes
 
@@ -175,16 +172,14 @@ class QResNetLoRA(nn.Module):
         layers = []
 
         for s in strides:
-            layers.append(block(self.in_planes, planes, self.relu, s, rank=rank))
+            layers.append(block(self.in_planes, planes, s, rank=rank))
             self.in_planes = planes
 
         return nn.Sequential(*layers)
 
     def forward(self, x):
-        if self.relu == 0:
-            out = self.bn1(self.conv1(x))
-        else:
-            out = F.relu(self.bn1(self.conv1(x)))
+
+        out = F.relu(self.bn1(self.conv1(x)))
 
         out = self.layer1(out)
         out = self.layer2(out)
@@ -220,7 +215,6 @@ class LoRA:
 
     def __init__(
         self,
-        Relu,
         num_blocks,
         pretrained_path,
         block=BasicBlockLoRA,
@@ -229,7 +223,7 @@ class LoRA:
         amp_dtype="bf16",
         rank=4,
     ):
-        self.model = QResNetLoRA(Relu, block, num_blocks, classes, rank=rank)
+        self.model = QResNetLoRA(block, num_blocks, classes, rank=rank)
 
         # Cached: this constructor runs once per Optuna trial, and re-reading
         # the same checkpoint from disk every trial is pure overhead.
