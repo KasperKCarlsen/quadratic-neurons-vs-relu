@@ -79,7 +79,14 @@ def parse_name_base(name_base):
     num_blocks = [int(n) for n in re.findall(r"\d+", arc_str)]
     if not num_blocks:
         raise ValueError(f"no architecture digits in {name_base!r}")
-    return model, int(relu_str), num_blocks
+    # relu is an integer in most study names, but the LoRA adapter studies were
+    # named with Train_Model.py's default ReLU=None (no --ReLU was passed), so the
+    # token is the literal "None". Parse leniently: a non-integer relu becomes None
+    # and the caller supplies the right value via --relu. (LoRA must use 2 to match
+    # the ReLU2 Baseline it adapts.) int("None") would otherwise raise here and make
+    # discover_studies skip the study as if it were a non-ResNet file.
+    relu = int(relu_str) if relu_str.lstrip("-").isdigit() else None
+    return model, relu, num_blocks
 
 
 def discover_studies():
@@ -243,7 +250,7 @@ def prepare_data(classes, test_split, device):
             X_test.to(device),  y_test.to(device))
 
 
-def build_model(model_class, relu, num_blocks, classes, load_path, best):
+def build_model(model_class, relu, num_blocks, classes, load_path, best, amp_dtype="off"):
     """Rebuild a model with exactly `best` as its hyperparameters.
 
     Instead of re-deriving each model's optimizer here (which drifted out of sync
@@ -257,8 +264,8 @@ def build_model(model_class, relu, num_blocks, classes, load_path, best):
     trial = optuna.trial.FixedTrial(best)
     try:
         if model_class in FROM_SCRATCH:
-            return model_class(relu, num_blocks, classes=classes, trial=trial)
-        return model_class(relu, num_blocks, load_path, classes=classes, trial=trial)
+            return model_class(relu, num_blocks, classes=classes, trial=trial, amp_dtype=amp_dtype)
+        return model_class(relu, num_blocks, load_path, classes=classes, trial=trial, amp_dtype=amp_dtype)
     except ValueError as e:
         # FixedTrial raises ValueError when a suggested param is absent from best.
         raise SystemExit(f"params are missing a hyperparameter the model needs: {e}")
@@ -279,7 +286,8 @@ def set_seed(seed):
 
 
 def train_seed(model_class, relu, num_blocks, classes, best, batch_size,
-               epochs, load_path, X_train, y_train, X_test, y_test, seed, seed_dir):
+               epochs, load_path, X_train, y_train, X_test, y_test, seed, seed_dir,
+               amp_dtype="off"):
     """Train one model from scratch for a single seed. Returns its best test acc,
     the wall-clock seconds spent reaching that best, the epoch it was reached at,
     and the per-epoch accuracy history.
@@ -292,7 +300,7 @@ def train_seed(model_class, relu, num_blocks, classes, best, batch_size,
 
     # Fresh random init (seed-dependent), with the tuned optimizer rebuilt from
     # `best` inside the constructor via FixedTrial - see build_model.
-    model = build_model(model_class, relu, num_blocks, classes, load_path, best)
+    model = build_model(model_class, relu, num_blocks, classes, load_path, best, amp_dtype)
 
     os.makedirs(seed_dir, exist_ok=True)
     best_acc, best_time, best_epoch, accs = 0.0, 0.0, -1, {}
@@ -415,7 +423,7 @@ def train_one(spec, args, device):
         acc, t_best, e_best, accs = train_seed(
             model_class, relu, num_blocks, classes, best, batch_size,
             args.epochs, args.load_path, X_fit, y_fit, X_test, y_test,
-            seed, f"{out_dir}/seed{seed}")
+            seed, f"{out_dir}/seed{seed}", args.amp_dtype)
         best_per_seed[seed] = acc
         accs_per_seed[seed] = accs
         time_per_seed[seed] = t_best
@@ -464,6 +472,17 @@ def specs_from_studies(args):
     specs = []
     for nb in name_bases:
         model, relu, num_blocks = parse_name_base(nb)
+        # --relu overrides the value parsed from the study name. This is REQUIRED
+        # for studies whose name carries no integer relu (LoRA's 'ReLUNone'): the
+        # adapter must run with the SAME relu as the frozen Baseline it wraps - 2
+        # for the ReLU2 base checkpoints in saved_models/. Otherwise the forward
+        # pass (and thus the tuned hyperparameters) won't match what HPO searched.
+        if args.relu is not None:
+            relu = args.relu
+        if relu is None:
+            raise SystemExit(
+                f"{nb}: no ReLU in the study name - pass --relu (use 2 for the "
+                f"ReLU2 Baseline that LoRA adapts).")
         study = load_study(nb)
         specs.append(Spec(model, relu, num_blocks, nb, study.best_params,
                           study.best_value))
@@ -502,6 +521,10 @@ if __name__ == "__main__":
                         help="Number of CIFAR-10 classes to train on (uses classes "
                              "0..N-1). Overrides the classes recorded by Train_Model.py; "
                              "if omitted, the recorded classes are used (default all 10).")
+    parser.add_argument("--amp_dtype", choices=["bf16", "fp16", "off"], default="off",
+                        help="Autocast dtype for final training. Default 'off' (fp32) "
+                             "matches the LoRA HPO studies, which ran --amp_dtype off; "
+                             "use the SAME value HPO used or the numerics won't match.")
     parser.add_argument("--refit-full", dest="refit_full", action="store_true",
                         help="Refit final models on train+val (hyperparameters fixed) "
                              "before evaluating on the official test set.")
@@ -514,7 +537,9 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default=None,
                         help=f"Raw mode: model name, one of {list(MODEL_MAP)}.")
     parser.add_argument("--relu", type=int, default=None,
-                        help="Raw mode: ReLU variant (0/1/2).")
+                        help="Raw mode: ReLU variant (0/1/2). In study mode it "
+                             "overrides the ReLU parsed from the study name and is "
+                             "REQUIRED for LoRA's 'ReLUNone' studies (use 2).")
     parser.add_argument("--num-blocks", dest="num_blocks", type=int, nargs="+",
                         default=None, help="Raw mode: blocks per stage, e.g. --num-blocks 9 9 9.")
     args = parser.parse_args()
