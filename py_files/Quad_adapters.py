@@ -139,14 +139,22 @@ class Quad_adapters:
 
     def __init__(
         self,
-        num_blocks,
-        pretrained_path,
-        block=BasicBlock,
+        relu,  # First parameter (matches build_model calling convention)
+        num_blocks,  # Second parameter
+        pretrained_path,  # Third parameter
         classes=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
         trial=None,
         amp_dtype="bf16",
         quad_layers="last",
+        block=BasicBlock,  # Default block
     ):
+        # Store relu if needed
+        self.relu = relu
+        
+        # If num_blocks is a single integer, convert it to a list of three
+        if isinstance(num_blocks, int):
+            num_blocks = [num_blocks, num_blocks, num_blocks]
+        
         self.model = QResNet(block, num_blocks, classes, quad_layers=quad_layers)
 
         # Cached: this constructor runs once per Optuna trial, and re-reading
@@ -213,6 +221,7 @@ class Quad_adapters:
             self.optimizer_name = "Adam"
             self.lr = 1e-3
             self.optimizer = None
+
 
     def train(self, X, y, batch_size, lr, epochs):
 
