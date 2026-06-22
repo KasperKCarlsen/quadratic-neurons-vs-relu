@@ -1,0 +1,56 @@
+Job 28715500 started Sun Jun 21 23:35:51 CEST 2026 on n-62-20-11 | model=LoRA blocks=9 9 9 workers=3
+  launched worker 1 (pid 3876467)
+  launched worker 2 (pid 3876506)
+  launched worker 3 (pid 3876561)
+==> logs/LoRA_9_28715500_w1.out <==
+
+==> logs/LoRA_9_28715500_w2.out <==
+
+==> logs/LoRA_9_28715500_w3.out <==
+
+==> logs/LoRA_9_28715500_w1.err <==
+/zhome/a9/6/217215/.local/lib/python3.9/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[I 2026-06-21 23:36:03,292] A new study created in Journal with name: LoRA_with_ReLUNone_arc_(9_9_9)
+
+==> logs/LoRA_9_28715500_w2.err <==
+/zhome/a9/6/217215/.local/lib/python3.9/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[I 2026-06-21 23:36:07,930] Using an existing study with name 'LoRA_with_ReLUNone_arc_(9_9_9)' instead of creating a new one.
+
+==> logs/LoRA_9_28715500_w3.err <==
+/zhome/a9/6/217215/.local/lib/python3.9/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[I 2026-06-21 23:36:16,449] Using an existing study with name 'LoRA_with_ReLUNone_arc_(9_9_9)' instead of creating a new one.
+[I 2026-06-22 00:26:08,539] Trial 2 finished with value: 93.16999816894531 and parameters: {'optimizer': 'AdamW', 'lr': 0.0007879390336445371, 'weight_decay': 0.007835884754284528, 'batch_size': 351}. Best is trial 2 with value: 93.16999816894531.
+
+==> logs/LoRA_9_28715500_w1.err <==
+[I 2026-06-22 01:06:46,219] Trial 0 finished with value: 92.26000213623047 and parameters: {'optimizer': 'AdamW', 'lr': 7.963287967177971e-05, 'weight_decay': 0.00024347262379154313, 'batch_size': 169}. Best is trial 2 with value: 93.16999816894531.
+
+==> logs/LoRA_9_28715500_w3.err <==
+[I 2026-06-22 02:11:16,423] Trial 3 finished with value: 93.12000274658203 and parameters: {'optimizer': 'Adam', 'lr': 0.0006962462455340008, 'batch_size': 108}. Best is trial 2 with value: 93.16999816894531.
+
+==> logs/LoRA_9_28715500_w1.err <==
+[I 2026-06-22 02:18:55,281] Trial 4 finished with value: 87.0 and parameters: {'optimizer': 'SGD', 'lr': 6.047662888550274e-05, 'momentum': 0.625963633412869, 'batch_size': 106}. Best is trial 2 with value: 93.16999816894531.
+
+==> logs/LoRA_9_28715500_w2.err <==
+[I 2026-06-22 03:00:52,565] Trial 1 finished with value: 93.58000183105469 and parameters: {'optimizer': 'Adam', 'lr': 0.00024051941845807835, 'batch_size': 55}. Best is trial 1 with value: 93.58000183105469.
+
+==> logs/LoRA_9_28715500_w1.err <==
+[I 2026-06-22 03:06:41,743] Trial 6 pruned. 
+[I 2026-06-22 03:27:17,527] Trial 8 pruned. 
+[I 2026-06-22 04:33:22,244] Trial 9 finished with value: 93.33999633789062 and parameters: {'optimizer': 'Adam', 'lr': 0.009510261524619182, 'batch_size': 195}. Best is trial 1 with value: 93.58000183105469.
+
+==> logs/LoRA_9_28715500_w3.err <==
+[I 2026-06-22 05:02:09,812] Trial 5 finished with value: 93.5199966430664 and parameters: {'optimizer': 'AdamW', 'lr': 0.0041747296808803255, 'weight_decay': 3.034682870768659e-05, 'batch_size': 63}. Best is trial 1 with value: 93.58000183105469.
+
+==> logs/LoRA_9_28715500_w2.err <==
+[I 2026-06-22 05:03:48,738] Trial 7 finished with value: 93.51000213623047 and parameters: {'optimizer': 'Adam', 'lr': 0.0006062073597663521, 'batch_size': 96}. Best is trial 1 with value: 93.58000183105469.
+[I 2026-06-22 05:17:15,697] Trial 12 pruned. 
+
+==> logs/LoRA_9_28715500_w1.err <==
+[I 2026-06-22 05:30:17,796] Trial 10 pruned. 
+
+==> logs/LoRA_9_28715500_w3.err <==
+[I 2026-06-22 05:43:39,784] Trial 11 pruned. 
+[I 2026-06-22 06:47:58,251] Trial 15 pruned. 

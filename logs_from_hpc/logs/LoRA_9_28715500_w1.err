@@ -1,0 +1,9 @@
+/zhome/a9/6/217215/.local/lib/python3.9/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[I 2026-06-21 23:36:03,292] A new study created in Journal with name: LoRA_with_ReLUNone_arc_(9_9_9)
+[I 2026-06-22 01:06:46,219] Trial 0 finished with value: 92.26000213623047 and parameters: {'optimizer': 'AdamW', 'lr': 7.963287967177971e-05, 'weight_decay': 0.00024347262379154313, 'batch_size': 169}. Best is trial 2 with value: 93.16999816894531.
+[I 2026-06-22 02:18:55,281] Trial 4 finished with value: 87.0 and parameters: {'optimizer': 'SGD', 'lr': 6.047662888550274e-05, 'momentum': 0.625963633412869, 'batch_size': 106}. Best is trial 2 with value: 93.16999816894531.
+[I 2026-06-22 03:06:41,743] Trial 6 pruned. 
+[I 2026-06-22 03:27:17,527] Trial 8 pruned. 
+[I 2026-06-22 04:33:22,244] Trial 9 finished with value: 93.33999633789062 and parameters: {'optimizer': 'Adam', 'lr': 0.009510261524619182, 'batch_size': 195}. Best is trial 1 with value: 93.58000183105469.
+[I 2026-06-22 05:30:17,796] Trial 10 pruned. 

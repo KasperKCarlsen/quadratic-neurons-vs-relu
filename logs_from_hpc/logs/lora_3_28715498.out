@@ -1,0 +1,144 @@
+Job 28715498 started Sun Jun 21 23:32:25 CEST 2026 on n-62-11-14 | model=LoRA blocks=3 3 3 workers=3
+  launched worker 1 (pid 3676846)
+  launched worker 2 (pid 3676977)
+  launched worker 3 (pid 3677025)
+==> logs/LoRA_3_28715498_w1.out <==
+
+==> logs/LoRA_3_28715498_w2.out <==
+
+==> logs/LoRA_3_28715498_w3.out <==
+
+==> logs/LoRA_3_28715498_w1.err <==
+/zhome/a9/6/217215/.local/lib/python3.9/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[I 2026-06-21 23:32:35,545] A new study created in Journal with name: LoRA_with_ReLUNone_arc_(3_3_3)
+
+==> logs/LoRA_3_28715498_w2.err <==
+/zhome/a9/6/217215/.local/lib/python3.9/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[I 2026-06-21 23:32:41,148] Using an existing study with name 'LoRA_with_ReLUNone_arc_(3_3_3)' instead of creating a new one.
+
+==> logs/LoRA_3_28715498_w3.err <==
+/zhome/a9/6/217215/.local/lib/python3.9/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[I 2026-06-21 23:32:51,072] Using an existing study with name 'LoRA_with_ReLUNone_arc_(3_3_3)' instead of creating a new one.
+[I 2026-06-21 23:54:54,139] Trial 2 finished with value: 64.26000213623047 and parameters: {'optimizer': 'SGD', 'lr': 1.0208728195559524e-05, 'momentum': 0.7545784515476673, 'batch_size': 204}. Best is trial 2 with value: 64.26000213623047.
+
+==> logs/LoRA_3_28715498_w2.err <==
+[I 2026-06-22 00:02:27,535] Trial 1 finished with value: 91.69000244140625 and parameters: {'optimizer': 'Adam', 'lr': 0.0017888165197962613, 'batch_size': 212}. Best is trial 1 with value: 91.69000244140625.
+[I 2026-06-22 00:20:10,447] Trial 4 finished with value: 76.7300033569336 and parameters: {'optimizer': 'SGD', 'lr': 2.6851875038077546e-06, 'momentum': 0.9798128953479799, 'batch_size': 308}. Best is trial 1 with value: 91.69000244140625.
+
+==> logs/LoRA_3_28715498_w1.err <==
+[I 2026-06-22 00:30:57,717] Trial 0 finished with value: 91.94000244140625 and parameters: {'optimizer': 'Adam', 'lr': 0.0014624718021671982, 'batch_size': 126}. Best is trial 0 with value: 91.94000244140625.
+
+==> logs/LoRA_3_28715498_w3.err <==
+[I 2026-06-22 00:33:50,751] Trial 3 finished with value: 83.70999908447266 and parameters: {'optimizer': 'SGD', 'lr': 0.00013335518685958422, 'momentum': 0.5295850406019827, 'batch_size': 123}. Best is trial 0 with value: 91.94000244140625.
+
+==> logs/LoRA_3_28715498_w2.err <==
+[I 2026-06-22 00:33:51,916] Trial 5 pruned. 
+
+==> logs/LoRA_3_28715498_w3.err <==
+[I 2026-06-22 00:43:19,249] Trial 7 pruned. 
+
+==> logs/LoRA_3_28715498_w1.err <==
+[I 2026-06-22 00:48:17,186] Trial 6 pruned. 
+
+==> logs/LoRA_3_28715498_w2.err <==
+[I 2026-06-22 01:06:05,317] Trial 8 finished with value: 90.26000213623047 and parameters: {'optimizer': 'AdamW', 'lr': 0.00010752793779386992, 'weight_decay': 0.0005208470884940539, 'batch_size': 256}. Best is trial 0 with value: 91.94000244140625.
+
+==> logs/LoRA_3_28715498_w1.err <==
+[I 2026-06-22 01:07:38,594] Trial 10 finished with value: 91.45999908447266 and parameters: {'optimizer': 'AdamW', 'lr': 0.0004595189133089842, 'weight_decay': 0.02787243789454575, 'batch_size': 445}. Best is trial 0 with value: 91.94000244140625.
+
+==> logs/LoRA_3_28715498_w3.err <==
+[I 2026-06-22 01:08:17,973] Trial 9 pruned. 
+
+==> logs/LoRA_3_28715498_w2.err <==
+[I 2026-06-22 01:47:52,747] Trial 11 finished with value: 90.47000122070312 and parameters: {'optimizer': 'Adam', 'lr': 7.036369650474524e-05, 'batch_size': 90}. Best is trial 0 with value: 91.94000244140625.
+
+==> logs/LoRA_3_28715498_w1.err <==
+[I 2026-06-22 02:01:51,168] Trial 12 finished with value: 91.33000183105469 and parameters: {'optimizer': 'Adam', 'lr': 0.009485355288214842, 'batch_size': 62}. Best is trial 0 with value: 91.94000244140625.
+
+==> logs/LoRA_3_28715498_w3.err <==
+[I 2026-06-22 02:10:49,008] Trial 13 finished with value: 91.2300033569336 and parameters: {'optimizer': 'Adam', 'lr': 0.009051821435876748, 'batch_size': 55}. Best is trial 0 with value: 91.94000244140625.
+
+==> logs/LoRA_3_28715498_w1.err <==
+[I 2026-06-22 02:29:14,326] Trial 15 finished with value: 91.75 and parameters: {'optimizer': 'Adam', 'lr': 0.00240113287777191, 'batch_size': 175}. Best is trial 0 with value: 91.94000244140625.
+
+==> logs/LoRA_3_28715498_w3.err <==
+[I 2026-06-22 02:42:01,716] Trial 16 finished with value: 91.87000274658203 and parameters: {'optimizer': 'Adam', 'lr': 0.0015123798638543373, 'batch_size': 167}. Best is trial 0 with value: 91.94000244140625.
+
+==> logs/LoRA_3_28715498_w2.err <==
+[I 2026-06-22 02:58:49,645] Trial 14 finished with value: 91.5199966430664 and parameters: {'optimizer': 'Adam', 'lr': 0.008314536656897987, 'batch_size': 61}. Best is trial 0 with value: 91.94000244140625.
+
+==> logs/LoRA_3_28715498_w1.err <==
+[I 2026-06-22 02:59:31,999] Trial 17 finished with value: 91.7300033569336 and parameters: {'optimizer': 'Adam', 'lr': 0.0013751456976160972, 'batch_size': 162}. Best is trial 0 with value: 91.94000244140625.
+
+==> logs/LoRA_3_28715498_w3.err <==
+[I 2026-06-22 03:33:09,754] Trial 18 finished with value: 91.95999908447266 and parameters: {'optimizer': 'Adam', 'lr': 0.0006243970245342816, 'batch_size': 79}. Best is trial 18 with value: 91.95999908447266.
+
+==> logs/LoRA_3_28715498_w2.err <==
+[I 2026-06-22 03:44:08,398] Trial 19 finished with value: 92.12000274658203 and parameters: {'optimizer': 'Adam', 'lr': 0.0005243262663581166, 'batch_size': 90}. Best is trial 19 with value: 92.12000274658203.
+
+==> logs/LoRA_3_28715498_w1.err <==
+[I 2026-06-22 03:48:16,241] Trial 20 finished with value: 91.9800033569336 and parameters: {'optimizer': 'Adam', 'lr': 0.00036021203367475916, 'batch_size': 82}. Best is trial 19 with value: 92.12000274658203.
+
+==> logs/LoRA_3_28715498_w3.err <==
+[I 2026-06-22 04:19:37,512] Trial 21 finished with value: 91.83999633789062 and parameters: {'optimizer': 'AdamW', 'lr': 0.0003910199703561962, 'weight_decay': 0.06789415066161585, 'batch_size': 87}. Best is trial 19 with value: 92.12000274658203.
+
+==> logs/LoRA_3_28715498_w2.err <==
+[I 2026-06-22 04:34:03,825] Trial 22 finished with value: 91.73999786376953 and parameters: {'optimizer': 'AdamW', 'lr': 0.00027953265445858393, 'weight_decay': 0.09096608503923975, 'batch_size': 78}. Best is trial 19 with value: 92.12000274658203.
+
+==> logs/LoRA_3_28715498_w1.err <==
+[I 2026-06-22 04:35:16,198] Trial 23 finished with value: 91.9000015258789 and parameters: {'optimizer': 'Adam', 'lr': 0.00035966408038364694, 'batch_size': 78}. Best is trial 19 with value: 92.12000274658203.
+
+==> logs/LoRA_3_28715498_w3.err <==
+[I 2026-06-22 05:09:16,757] Trial 24 finished with value: 91.91000366210938 and parameters: {'optimizer': 'Adam', 'lr': 0.0004232271057229514, 'batch_size': 77}. Best is trial 19 with value: 92.12000274658203.
+
+==> logs/LoRA_3_28715498_w1.err <==
+[I 2026-06-22 05:13:37,143] Trial 26 finished with value: 91.9000015258789 and parameters: {'optimizer': 'Adam', 'lr': 0.0006801206290516149, 'batch_size': 108}. Best is trial 19 with value: 92.12000274658203.
+
+==> logs/LoRA_3_28715498_w2.err <==
+[I 2026-06-22 05:26:21,695] Trial 25 finished with value: 91.9800033569336 and parameters: {'optimizer': 'Adam', 'lr': 0.0006274186712931722, 'batch_size': 75}. Best is trial 19 with value: 92.12000274658203.
+
+==> logs/LoRA_3_28715498_w3.err <==
+[I 2026-06-22 05:45:51,948] Trial 27 finished with value: 91.94000244140625 and parameters: {'optimizer': 'Adam', 'lr': 0.0008898792800191821, 'batch_size': 102}. Best is trial 19 with value: 92.12000274658203.
+
+==> logs/LoRA_3_28715498_w2.err <==
+[I 2026-06-22 05:48:46,433] Trial 29 pruned. 
+[I 2026-06-22 06:01:31,993] Trial 31 pruned. 
+
+==> logs/LoRA_3_28715498_w3.err <==
+[I 2026-06-22 06:01:56,122] Trial 30 pruned. 
+
+==> logs/LoRA_3_28715498_w1.err <==
+[I 2026-06-22 06:10:11,225] Trial 28 finished with value: 91.66000366210938 and parameters: {'optimizer': 'Adam', 'lr': 0.0035811319069825242, 'batch_size': 64}. Best is trial 19 with value: 92.12000274658203.
+
+==> logs/LoRA_3_28715498_w2.err <==
+[I 2026-06-22 06:12:29,844] Trial 32 pruned. 
+
+==> logs/LoRA_3_28715498_w1.err <==
+[I 2026-06-22 06:49:51,887] Trial 34 finished with value: 91.97000122070312 and parameters: {'optimizer': 'Adam', 'lr': 0.0008211498585171058, 'batch_size': 95}. Best is trial 19 with value: 92.12000274658203.
+
+==> logs/LoRA_3_28715498_w2.err <==
+[I 2026-06-22 06:53:24,962] Trial 35 finished with value: 91.70999908447266 and parameters: {'optimizer': 'Adam', 'lr': 0.0008008565699803185, 'batch_size': 92}. Best is trial 19 with value: 92.12000274658203.
+
+==> logs/LoRA_3_28715498_w3.err <==
+[I 2026-06-22 06:55:41,830] Trial 33 finished with value: 91.7699966430664 and parameters: {'optimizer': 'Adam', 'lr': 0.0007678603770979745, 'batch_size': 70}. Best is trial 19 with value: 92.12000274658203.
+
+==> logs/LoRA_3_28715498_w2.err <==
+[I 2026-06-22 07:05:19,925] Trial 37 pruned. 
+
+==> logs/LoRA_3_28715498_w1.err <==
+[I 2026-06-22 07:06:02,542] Trial 36 pruned. 
+
+==> logs/LoRA_3_28715498_w3.err <==
+[I 2026-06-22 07:09:12,333] Trial 38 pruned. 
+
+==> logs/LoRA_3_28715498_w1.err <==
+[I 2026-06-22 07:17:37,066] Trial 40 pruned. 
+
+==> logs/LoRA_3_28715498_w2.err <==
+[I 2026-06-22 07:19:07,483] Trial 39 pruned. 
+
+==> logs/LoRA_3_28715498_w3.err <==
+[I 2026-06-22 07:20:58,158] Trial 41 pruned. 

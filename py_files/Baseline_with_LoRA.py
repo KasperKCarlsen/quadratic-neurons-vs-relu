@@ -39,9 +39,10 @@ class LoRALayer(nn.Module):
         self.lora_A = nn.Parameter(torch.zeros(rank, in_features))
         self.lora_B = nn.Parameter(torch.zeros(out_features, rank))
 
-        # Initialize
+        # Initialize. A non-zero, B zero (see LoRAConv2d) so the increment starts
+        # at 0 but the adapter can actually learn.
         nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-        nn.init.zeros_(self.lora_A)
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B)
 
     def forward(self, x):
@@ -92,8 +93,12 @@ class LoRAConv2d(nn.Module):
             rank, out_channels, 1, bias=False
         )  # 1x1 conv to combine
 
-        # Initialize LoRA layers
-        nn.init.zeros_(self.lora_A.weight)
+        # Initialize LoRA layers. A must be NON-zero or gradients to both A and
+        # B stay zero (grad wrt A is B^T@grad, grad wrt B is grad@A(x)); zeroing
+        # both freezes the adapter forever - it never trains. Standard LoRA, and
+        # what the HPO (adapt branch) tuned against: A random, B zero, so the
+        # initial increment B(A(x)) is still 0 but gradients can flow.
+        nn.init.kaiming_uniform_(self.lora_A.weight, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B.weight)
 
     def forward(self, x):
@@ -242,7 +247,9 @@ class LoRA:
         model_dict = self.model.state_dict()
         pretrained_dict_remapped = {}
         for k, v in model_dict.items():
-            src_key = k.replace(".conv.weight", ".weight").replace(".conv.bias", ".bias")
+            src_key = k.replace(".conv.weight", ".weight").replace(
+                ".conv.bias", ".bias"
+            )
             if src_key in pretrained_dict and pretrained_dict[src_key].shape == v.shape:
                 pretrained_dict_remapped[k] = pretrained_dict[src_key]
 
@@ -260,8 +267,14 @@ class LoRA:
         self.device = torch.device("cuda")
         # channels_last + bf16 autocast is the standard fast recipe for conv
         # nets on Tensor Core GPUs (A100); keep plain fp32/contiguous on CPU.
-        self.memory_format = torch.channels_last if self.device.type == "cuda" else torch.contiguous_format
-        self.use_amp, self.amp_dtype, _needs_scaler = resolve_amp_dtype(amp_dtype, self.device)
+        self.memory_format = (
+            torch.channels_last
+            if self.device.type == "cuda"
+            else torch.contiguous_format
+        )
+        self.use_amp, self.amp_dtype, _needs_scaler = resolve_amp_dtype(
+            amp_dtype, self.device
+        )
         # fp16 (V100/Volta path) needs gradient scaling; bf16 (A100) does not.
         self.scaler = torch.amp.GradScaler("cuda", enabled=_needs_scaler)
         self.model.to(self.device, memory_format=self.memory_format)
@@ -313,7 +326,6 @@ class LoRA:
         )
         total_params = sum(p.numel() for p in self.model.parameters())
 
-
         if self.optimizer is None:
             self.optimizer = torch.optim.Adam(
                 filter(lambda p: p.requires_grad, self.model.parameters()), lr=lr
@@ -329,11 +341,17 @@ class LoRA:
 
             # Keep batch shape constant on GPU so cudnn.benchmark doesn't have
             # to re-tune kernels for a one-off, smaller final batch each epoch.
-            for images, labels in iterate_batches(X, y, batch_size, shuffle=True, drop_last=self.use_amp):
+            for images, labels in iterate_batches(
+                X, y, batch_size, shuffle=True, drop_last=self.use_amp
+            ):
                 images = images.to(memory_format=self.memory_format)
 
                 self.optimizer.zero_grad(set_to_none=True)
-                with torch.autocast(device_type=self.device.type, dtype=self.amp_dtype, enabled=self.use_amp):
+                with torch.autocast(
+                    device_type=self.device.type,
+                    dtype=self.amp_dtype,
+                    enabled=self.use_amp,
+                ):
                     outputs = self.fwd(images)
                     loss = self.criterion(outputs, labels)
                 self.scaler.scale(loss).backward()
@@ -344,8 +362,7 @@ class LoRA:
                 correct += (outputs.detach().argmax(1) == labels).sum()
                 total += labels.size(0)
 
-
-        return acc_train, loss_train
+        return None
 
     def test(self, X, y):
         self.model.eval()  # disable dropout/batchnorm training behavior
@@ -353,12 +370,16 @@ class LoRA:
         correct = torch.zeros((), device=self.device)
         total = torch.zeros((), device=self.device)
 
-        with torch.inference_mode(), torch.autocast(device_type=self.device.type, dtype=self.amp_dtype, enabled=self.use_amp):
+        with torch.inference_mode(), torch.autocast(
+            device_type=self.device.type, dtype=self.amp_dtype, enabled=self.use_amp
+        ):
             # No backward pass during eval, so memory pressure is far lower
             # than training - use a bigger batch (matches the upper end of
             # the trial's batch_size search space, which already has to fit
             # during training) to cut down on kernel-launch overhead.
-            for inputs, labels in iterate_batches(X, y, batch_size=512, shuffle=False, drop_last=False):
+            for inputs, labels in iterate_batches(
+                X, y, batch_size=512, shuffle=False, drop_last=False
+            ):
                 inputs = inputs.to(memory_format=self.memory_format)
 
                 outputs = self.fwd(inputs)
@@ -373,4 +394,6 @@ class LoRA:
 
     def load(self, path):
         map_location = "cuda"
-        self.model.load_state_dict(torch.load(path, map_location=map_location, weights_only=True))
+        self.model.load_state_dict(
+            torch.load(path, map_location=map_location, weights_only=True)
+        )
