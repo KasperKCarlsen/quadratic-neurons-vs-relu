@@ -1,0 +1,9 @@
+/zhome/a9/6/217215/.local/lib/python3.9/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[I 2026-06-21 23:33:13,035] Using an existing study with name 'LoRA_with_ReLUNone_arc_(5_5_5)' instead of creating a new one.
+[I 2026-06-22 00:31:38,403] Trial 2 finished with value: 88.33999633789062 and parameters: {'optimizer': 'AdamW', 'lr': 1.8047757431831263e-05, 'weight_decay': 0.00028545104258651194, 'batch_size': 111}. Best is trial 2 with value: 88.33999633789062.
+[I 2026-06-22 01:27:26,041] Trial 4 finished with value: 89.1500015258789 and parameters: {'optimizer': 'AdamW', 'lr': 3.7966923700486754e-05, 'weight_decay': 0.0009578885881387286, 'batch_size': 164}. Best is trial 3 with value: 92.41000366210938.
+[I 2026-06-22 02:38:46,718] Trial 6 finished with value: 92.44000244140625 and parameters: {'optimizer': 'Adam', 'lr': 0.00025063550816757624, 'batch_size': 100}. Best is trial 8 with value: 92.7300033569336.
+[I 2026-06-22 05:19:19,369] Trial 11 finished with value: 92.62000274658203 and parameters: {'optimizer': 'AdamW', 'lr': 0.008833766444364594, 'weight_decay': 0.0035318069738374583, 'batch_size': 70}. Best is trial 14 with value: 92.7699966430664.
+[I 2026-06-22 06:13:19,803] Trial 22 finished with value: 92.83999633789062 and parameters: {'optimizer': 'Adam', 'lr': 0.0017577931183109226, 'batch_size': 358}. Best is trial 22 with value: 92.83999633789062.
+[I 2026-06-22 07:03:47,199] Trial 25 finished with value: 92.66999816894531 and parameters: {'optimizer': 'Adam', 'lr': 0.0007297166316920007, 'batch_size': 399}. Best is trial 22 with value: 92.83999633789062.

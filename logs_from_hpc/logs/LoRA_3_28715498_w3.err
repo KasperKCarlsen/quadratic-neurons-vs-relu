@@ -1,0 +1,17 @@
+/zhome/a9/6/217215/.local/lib/python3.9/site-packages/torch/cuda/__init__.py:63: FutureWarning: The pynvml package is deprecated. Please install nvidia-ml-py instead. If you did not install pynvml directly, please report this to the maintainers of the package that installed pynvml for you.
+  import pynvml  # type: ignore[import]
+[I 2026-06-21 23:32:51,072] Using an existing study with name 'LoRA_with_ReLUNone_arc_(3_3_3)' instead of creating a new one.
+[I 2026-06-21 23:54:54,139] Trial 2 finished with value: 64.26000213623047 and parameters: {'optimizer': 'SGD', 'lr': 1.0208728195559524e-05, 'momentum': 0.7545784515476673, 'batch_size': 204}. Best is trial 2 with value: 64.26000213623047.
+[I 2026-06-22 00:33:50,751] Trial 3 finished with value: 83.70999908447266 and parameters: {'optimizer': 'SGD', 'lr': 0.00013335518685958422, 'momentum': 0.5295850406019827, 'batch_size': 123}. Best is trial 0 with value: 91.94000244140625.
+[I 2026-06-22 00:43:19,249] Trial 7 pruned. 
+[I 2026-06-22 01:08:17,973] Trial 9 pruned. 
+[I 2026-06-22 02:10:49,008] Trial 13 finished with value: 91.2300033569336 and parameters: {'optimizer': 'Adam', 'lr': 0.009051821435876748, 'batch_size': 55}. Best is trial 0 with value: 91.94000244140625.
+[I 2026-06-22 02:42:01,716] Trial 16 finished with value: 91.87000274658203 and parameters: {'optimizer': 'Adam', 'lr': 0.0015123798638543373, 'batch_size': 167}. Best is trial 0 with value: 91.94000244140625.
+[I 2026-06-22 03:33:09,754] Trial 18 finished with value: 91.95999908447266 and parameters: {'optimizer': 'Adam', 'lr': 0.0006243970245342816, 'batch_size': 79}. Best is trial 18 with value: 91.95999908447266.
+[I 2026-06-22 04:19:37,512] Trial 21 finished with value: 91.83999633789062 and parameters: {'optimizer': 'AdamW', 'lr': 0.0003910199703561962, 'weight_decay': 0.06789415066161585, 'batch_size': 87}. Best is trial 19 with value: 92.12000274658203.
+[I 2026-06-22 05:09:16,757] Trial 24 finished with value: 91.91000366210938 and parameters: {'optimizer': 'Adam', 'lr': 0.0004232271057229514, 'batch_size': 77}. Best is trial 19 with value: 92.12000274658203.
+[I 2026-06-22 05:45:51,948] Trial 27 finished with value: 91.94000244140625 and parameters: {'optimizer': 'Adam', 'lr': 0.0008898792800191821, 'batch_size': 102}. Best is trial 19 with value: 92.12000274658203.
+[I 2026-06-22 06:01:56,122] Trial 30 pruned. 
+[I 2026-06-22 06:55:41,830] Trial 33 finished with value: 91.7699966430664 and parameters: {'optimizer': 'Adam', 'lr': 0.0007678603770979745, 'batch_size': 70}. Best is trial 19 with value: 92.12000274658203.
+[I 2026-06-22 07:09:12,333] Trial 38 pruned. 
+[I 2026-06-22 07:20:58,158] Trial 41 pruned. 
