@@ -1,15 +1,16 @@
 # Quadratic neurons vs. ReLU
 
-This repository compares conventional ReLU networks with quadratic-neuron
-networks, quadratic adapters, LoRA adapters, and related ViT experiments.
+This repository stems from a project work course on the Technical University of Denmark (DTU) and compares conventional ReLU networks with quadratic-neuron networks, quadratic adapters with LoRA adapters, and related ViT experiments.
+
+This was used to test whether non-linear activation functions can be omitted from quadratic networks, in particular quadratic convolutional neural networks (QCNN), without hurting the performance of the models. 
 
 ## Repository layout
 
-- `py_files/` - the single canonical implementation of the CNN and ViT models.
+- `py_files/` - the implementation of the CNN and ViT models.
 - `HPO/` - Optuna training scripts, study inspection tools, and HPO job files.
 - `Model_training/` - refitting/final-training code and CNN/adapter HPC jobs.
 - `ViT/` - ViT training, refitting, pretrained-feature experiments, and jobs.
-- `Visualizations/architecture/` - model architecture diagrams and their generator.
+- `Visualizations/` - visualizations of the architectures used.
 - `Results/repeated_seed_evaluation/Done_models/` - finalized model checkpoints,
   per-seed accuracy histories, and `seed_results.json` summaries.
 - `Results/model_comparison/` - generated comparison tables from the finalized
@@ -17,9 +18,9 @@ networks, quadratic adapters, LoRA adapters, and related ViT experiments.
 - `Results/training_evaluation_visualizations/` - training/evaluation accuracy
   plots.
 
-Generated checkpoints, Optuna databases, logs, caches, and local datasets are
-ignored. The committed result artifacts are the finalized experiments intended
-for analysis.
+Intermediate results such as checkpoints, logs, caches, e.g. are left out to preserve readability in the repo. \
+Final model accuracies, comparisons and training visualizations can be found in the Results directory.
+
 
 To regenerate the model comparison table:
 
