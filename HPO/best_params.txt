@@ -1,0 +1,7 @@
+{
+  "optimizer": "Adam",
+  "lr": 0.002212645414152511,
+  "relinear_ratio_b": 0.054974832617927946,
+  "relinear_ratio_g": 0.007693665943936383,
+  "batch_size": 147
+}
