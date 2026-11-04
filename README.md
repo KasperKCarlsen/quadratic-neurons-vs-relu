@@ -4,6 +4,12 @@ This repository stems from a project work course on the Technical University of 
 
 This was used to test whether non-linear activation functions can be omitted from quadratic networks, in particular quadratic convolutional neural networks (QCNN), without hurting the performance of the models. 
 
+The datasets used for this project are
+ - CIFAR10 - used for QCNN vs CNN
+ - CIFAR100 - used for ViT
+
+Both are downloaded through the website: https://cave.cs.toronto.edu/kriz/cifar.html
+
 ## Repository layout
 
 - `py_files/` - the implementation of the CNN and ViT models.
@@ -21,6 +27,7 @@ This was used to test whether non-linear activation functions can be omitted fro
 Intermediate results such as checkpoints, logs, caches, e.g. are left out to preserve readability in the repo. \
 Final model accuracies, comparisons and training visualizations can be found in the Results directory.
 
+To run the programs in the repository, CUDA is required.
 
 To update model_comparison.csv and model_comparison.json given new results:
 
