@@ -22,7 +22,7 @@ Intermediate results such as checkpoints, logs, caches, e.g. are left out to pre
 Final model accuracies, comparisons and training visualizations can be found in the Results directory.
 
 
-To regenerate the model comparison table:
+To update model_comparison.csv and model_comparison.json given new results:
 
 ```bash
 python Results/model_comparison/summarize_results.py
