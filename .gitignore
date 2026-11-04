@@ -1,0 +1,14 @@
+data/
+venv/
+.optuna/
+__pycache__/
+*.py[cod]
+HPO/optuna_databases/
+HPO/models/
+Model_training/models/
+ViT/optuna_databases/
+ViT/models/
+*.db
+*.log
+*.out
+*.err

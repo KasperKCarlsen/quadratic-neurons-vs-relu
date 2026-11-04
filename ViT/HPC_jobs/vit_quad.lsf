@@ -1,0 +1,83 @@
+#!/bin/bash
+#     mkdir -p logs && bsub < submit_vit_hpo_mps.lsf
+#BSUB -J ViT_quad_full
+#BSUB -q gpua100
+#BSUB -gpu "num=1:mode=exclusive_process:mps=yes"
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=4GB]"
+#BSUB -W 12:00
+#BSUB -B
+#BSUB -N
+#BSUB -u s245146@dtu.dk
+#BSUB -o ~//logs/.out
+#BSUB -e ~//job.err my_script.sh
+set -euo pipefail
+cd ~/Fagprojekt
+mkdir -p logs optuna_databases
+# ---- experiment config (edit these) ---------------------------------
+NUM_WORKERS=2
+DATASET=cifar100
+MODEL=ViT_quad            # ViT_quad | ViT_baseline
+FULL_ARG=--full           # --full (cross-term) | --no-full (reduced). ViT_quad only.
+FREEZE_ARG=               # set to --freeze_qv_linear for the matched-ablation baseline; else leave empty
+EPOCHS=10                 # ViT finetuning converges fast
+TRIALS_PER_WORKER=10
+GRAD_CLIP=1.0
+
+# ---------------------------------------------------------------------
+echo "Job ${LSB_JOBID:-?} started $(date) on $(hostname) | workers=${NUM_WORKERS} | model=${MODEL}"
+# --- Environment -----------------------------------------------------
+NPROC=${LSB_DJOB_NUMPROC:-12}
+THREADS=$(( NPROC / NUM_WORKERS ))
+[ "$THREADS" -lt 1 ] && THREADS=1
+export OMP_NUM_THREADS=$THREADS
+export MKL_NUM_THREADS=$THREADS
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True  
+# --- Launch workers --------------------------------------------------
+pids=()
+for i in $(seq 1 "$NUM_WORKERS"); do
+     python ViT/Train_ViT.py \
+        --model "$MODEL" \
+        --dataset "$DATASET" \
+        $FULL_ARG \
+        $FREEZE_ARG \
+        --grad_clip "$GRAD_CLIP" \
+        --epoch "$EPOCHS" \
+        --n_trials "$TRIALS_PER_WORKER" \
+        --storage journal \
+        > "logs/${MODEL}_mps_${LSB_JOBID:-0}_w${i}.out" \
+        2> "logs/${MODEL}_mps_${LSB_JOBID:-0}_w${i}.err" &
+    pids+=($!)
+    echo "  launched worker $i (pid $!)"
+    sleep 10
+done
+# --- Live-stream worker logs into THIS job's stdout ------------------
+tail -n +1 -F "logs/${MODEL}_mps_${LSB_JOBID:-0}_w"*.out \
+             "logs/${MODEL}_mps_${LSB_JOBID:-0}_w"*.err &
+TAIL_PID=$!
+# --- GPU monitor -----------------------------------------------------
+GPU_LOG="logs/gpu_${LSB_JOBID:-0}.log"
+( echo "timestamp,gpu_util_%,mem_util_%,mem_used_MiB,mem_total_MiB,power_W"
+  while true; do
+      nvidia-smi --query-gpu=timestamp,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw \
+                 --format=csv,noheader,nounits
+      sleep 30
+  done ) > "$GPU_LOG" &
+GPU_MON_PID=$!
+# --- Wait + report ---------------------------------------------------
+fail=0
+for idx in "${!pids[@]}"; do
+    pid=${pids[$idx]}
+    if ! wait "$pid"; then
+        echo "WARNING: worker $((idx+1)) (pid $pid) exited non-zero -> see its .err log"
+        fail=1
+    fi
+done
+sleep 2
+kill "$TAIL_PID" 2>/dev/null || true
+wait "$TAIL_PID" 2>/dev/null || true
+kill "$GPU_MON_PID" 2>/dev/null || true
+wait "$GPU_MON_PID" 2>/dev/null || true
+echo "Job finished $(date) | any_worker_failed=${fail}"
+exit "$fail"

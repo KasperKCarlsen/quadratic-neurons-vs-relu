@@ -1,0 +1,97 @@
+#!/bin/bash
+# Submit from ~/Fagprojekt with:  mkdir -p logs optuna_databases && bsub < jobs/lora_9.lsf
+#BSUB -J lora_9_9_9
+#BSUB -q gpuv100
+#BSUB -gpu "num=1:mode=exclusive_process:mps=yes"
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=2GB]"
+#BSUB -W 16:00
+#BSUB -B
+#BSUB -N
+#BSUB -u s245809@dtu.dk
+#BSUB -o logs/lora_9_%J.out
+#BSUB -e logs/lora_9_%J.err
+set -euo pipefail
+cd ~/Fagprojekt
+mkdir -p logs optuna_databases
+# ---- experiment config (this script = architecture 9 9 9) -----------
+NUM_WORKERS=3
+MODEL=LoRA
+BLOCKS=(9 9 9)
+EPOCHS=150
+TOTAL_TRIALS=20
+# V100 (Volta) has NO hardware bf16. Use 'off' (fp32, safe) or 'fp16'
+# (Tensor Cores, faster; auto-enables a GradScaler). Never 'bf16' here.
+AMP_DTYPE=off
+CLASSES=(0 1 2 3 4 5 6 7 8 9)
+LOAD_PATH="saved_models/9/best"
+# ---------------------------------------------------------------------
+# Activate the project venv (created once on a login node). Without this the
+# workers run the system python with no torch/optuna installed.
+source ~/Fagprojekt/venv/bin/activate
+# LoRA adapts a pretrained Baseline checkpoint; fail fast if it's missing
+# rather than after launching workers.
+if [ ! -f "$LOAD_PATH" ]; then
+    echo "ERROR: LOAD_PATH '$LOAD_PATH' not found (did you scp saved_models/?)." >&2
+    exit 1
+fi
+echo "Job ${LSB_JOBID:-?} started $(date) on $(hostname) | model=$MODEL blocks=${BLOCKS[*]} workers=${NUM_WORKERS}"
+# --- Environment -----------------------------------------------------
+# Split granted cores across workers so N processes don't oversubscribe the CPU.
+NPROC=${LSB_DJOB_NUMPROC:-12}
+THREADS=$(( NPROC / NUM_WORKERS ))
+[ "$THREADS" -lt 1 ] && THREADS=1
+export OMP_NUM_THREADS=$THREADS
+export MKL_NUM_THREADS=$THREADS
+# --- Launch workers --------------------------------------------------
+# Every worker runs the SAME command. --storage journal + load_if_exists makes
+# workers 2..N JOIN the one study worker 1 creates (results land in
+# optuna_databases/<study>.log). Each worker's stdout/stderr goes to its own
+# file: MPS merges streams otherwise.
+pids=()
+for i in $(seq 1 "$NUM_WORKERS"); do
+    python HPO/Train_Model.py \
+        --model "$MODEL" \
+        --num_blocks "${BLOCKS[@]}" \
+        --classes "${CLASSES[@]}" \
+        --epoch "$EPOCHS" \
+        --total_trials "$TOTAL_TRIALS" \
+        --amp_dtype "$AMP_DTYPE" \
+        --storage journal \
+        --load_path "$LOAD_PATH" \
+        > "logs/${MODEL}_9_${LSB_JOBID:-0}_w${i}.out" \
+        2> "logs/${MODEL}_9_${LSB_JOBID:-0}_w${i}.err" &
+    pids+=($!)
+    echo "  launched worker $i (pid $!)"
+    sleep 10   # small stagger: lets worker 1 lead on study creation / first compile
+done
+# --- Live-stream worker logs into this job's stdout ------------------
+tail -n +1 -F "logs/${MODEL}_9_${LSB_JOBID:-0}_w"*.out \
+             "logs/${MODEL}_9_${LSB_JOBID:-0}_w"*.err &
+TAIL_PID=$!
+# --- GPU utilisation log --------------------------------------------
+GPU_LOG="logs/gpu_9_${LSB_JOBID:-0}.log"
+( echo "timestamp,gpu_util_%,mem_util_%,mem_used_MiB,mem_total_MiB,power_W"
+  while true; do
+      nvidia-smi --query-gpu=timestamp,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw \
+                 --format=csv,noheader,nounits
+      sleep 30
+  done ) > "$GPU_LOG" &
+GPU_MON_PID=$!
+# --- Wait + report ---------------------------------------------------
+fail=0
+for idx in "${!pids[@]}"; do
+    pid=${pids[$idx]}
+    if ! wait "$pid"; then
+        echo "WARNING: worker $((idx+1)) (pid $pid) exited non-zero -> see its .err log"
+        fail=1
+    fi
+done
+sleep 2
+kill "$TAIL_PID" 2>/dev/null || true
+wait "$TAIL_PID" 2>/dev/null || true
+kill "$GPU_MON_PID" 2>/dev/null || true
+wait "$GPU_MON_PID" 2>/dev/null || true
+echo "Job finished $(date) | any_worker_failed=${fail}"
+exit "$fail"

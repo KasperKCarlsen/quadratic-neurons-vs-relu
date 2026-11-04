@@ -1,0 +1,92 @@
+#!/bin/bash
+#     mkdir -p logs && bsub < jobs/quad_adapter.lsf
+#BSUB -J Quad_adapters_HPO
+#BSUB -q gpua100
+#BSUB -gpu "num=1:mode=exclusive_process:mps=yes"
+#BSUB -n 4
+#BSUB -R "span[hosts=1]"
+#BSUB -R "rusage[mem=8GB]"
+#BSUB -W 24:00
+#BSUB -B
+#BSUB -N
+#BSUB -u s245146@dtu.dk
+#BSUB -o logs/quad_adapters_%J.out
+#BSUB -e logs/quad_adapters_%J.err
+set -euo pipefail
+cd ~/Fagprojekt
+mkdir -p logs optuna_databases
+# Activate the env holding the ResNet/Optuna deps (edit to match your setup).
+source .optuna/bin/activate
+# ---- experiment config (edit these) ---------------------------------
+NUM_WORKERS=2
+MODEL=Quad_adapters
+RELU=0
+NUM_BLOCKS="5 5 5"          # MUST match the baseline checkpoint's architecture
+# Pretrained baseline to adapt onto (its linear conv weights are frozen, the
+# quadratic adapters are trained). Must match RELU, NUM_BLOCKS and the class
+# subset the baseline was trained on. The () are fine because it is quoted.
+LOAD_PATH="Results/repeated_seed_evaluation/Done_models/Baseline_ReLU0_arc_[5, 5, 5]/seed0/best"
+CLASSES=""                  # match the baseline's classes, e.g. CLASSES="--classes 0 1 2 3 4 5 6 7"; empty = all 10
+EPOCHS=100
+# Train_Model.py runs exactly ONE Optuna trial per invocation (n_trials=1 is
+# hardcoded), so each worker loops to accumulate trials. All workers append to
+# the same sqlite study (Quad_adapters_with_ReLU0_study.db) via load_if_exists.
+TRIALS_PER_WORKER=20
+# ---------------------------------------------------------------------
+echo "Job ${LSB_JOBID:-?} started $(date) on $(hostname) | workers=${NUM_WORKERS} | model=${MODEL}"
+# --- Environment -----------------------------------------------------
+NPROC=${LSB_DJOB_NUMPROC:-12}
+THREADS=$(( NPROC / NUM_WORKERS ))
+[ "$THREADS" -lt 1 ] && THREADS=1
+export OMP_NUM_THREADS=$THREADS
+export MKL_NUM_THREADS=$THREADS
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+# --- Launch workers --------------------------------------------------
+pids=()
+for i in $(seq 1 "$NUM_WORKERS"); do
+    (
+      for t in $(seq 1 "$TRIALS_PER_WORKER"); do
+          echo "[worker $i] trial $t/$TRIALS_PER_WORKER $(date)"
+          python HPO/Train_Model.py \
+              --model "$MODEL" \
+              --ReLU "$RELU" \
+              --num_blocks $NUM_BLOCKS \
+              --load_path "$LOAD_PATH" \
+              $CLASSES \
+              --epoch "$EPOCHS"
+      done
+    ) > "logs/${MODEL}_mps_${LSB_JOBID:-0}_w${i}.out" \
+      2> "logs/${MODEL}_mps_${LSB_JOBID:-0}_w${i}.err" &
+    pids+=($!)
+    echo "  launched worker $i (pid $!)"
+    sleep 10
+done
+# --- Live-stream worker logs into THIS job's stdout ------------------
+tail -n +1 -F "logs/${MODEL}_mps_${LSB_JOBID:-0}_w"*.out \
+             "logs/${MODEL}_mps_${LSB_JOBID:-0}_w"*.err &
+TAIL_PID=$!
+# --- GPU monitor -----------------------------------------------------
+GPU_LOG="logs/gpu_${LSB_JOBID:-0}.log"
+( echo "timestamp,gpu_util_%,mem_util_%,mem_used_MiB,mem_total_MiB,power_W"
+  while true; do
+      nvidia-smi --query-gpu=timestamp,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw \
+                 --format=csv,noheader,nounits
+      sleep 30
+  done ) > "$GPU_LOG" &
+GPU_MON_PID=$!
+# --- Wait + report ---------------------------------------------------
+fail=0
+for idx in "${!pids[@]}"; do
+    pid=${pids[$idx]}
+    if ! wait "$pid"; then
+        echo "WARNING: worker $((idx+1)) (pid $pid) exited non-zero -> see its .err log"
+        fail=1
+    fi
+done
+sleep 2
+kill "$TAIL_PID" 2>/dev/null || true
+wait "$TAIL_PID" 2>/dev/null || true
+kill "$GPU_MON_PID" 2>/dev/null || true
+wait "$GPU_MON_PID" 2>/dev/null || true
+echo "Job finished $(date) | any_worker_failed=${fail}"
+exit "$fail"

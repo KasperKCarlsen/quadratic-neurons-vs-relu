@@ -1,0 +1,218 @@
+[
+  {
+    "configuration": "Baseline_with_ReLU2_arc_(9_9_9)",
+    "mean_accuracy": 84.08200073242188,
+    "std_accuracy": 0.4458371238150404,
+    "hpo_best_value": 85.88999938964844,
+    "seeds": 5,
+    "mean_time_to_best": 2544.1550890200015,
+    "std_time_to_best": 336.41111075188127
+  },
+  {
+    "configuration": "Baseline_with_ReLU2_arc_(5_5_5)",
+    "mean_accuracy": 82.9760009765625,
+    "std_accuracy": 0.2961081280565623,
+    "hpo_best_value": 84.98999786376953,
+    "seeds": 5,
+    "mean_time_to_best": 1504.0999865600002,
+    "std_time_to_best": 105.52288525786444
+  },
+  {
+    "configuration": "Baseline1_with_ReLU2_arc_(9_9_9)",
+    "mean_accuracy": 82.82499694824219,
+    "std_accuracy": 0.0,
+    "hpo_best_value": 85.88999938964844,
+    "seeds": 1,
+    "mean_time_to_best": 2444.1393420999993,
+    "std_time_to_best": 0.0
+  },
+  {
+    "configuration": "Baseline1_with_ReLU2_arc_(5_5_5)",
+    "mean_accuracy": 82.55000305175781,
+    "std_accuracy": 0.0,
+    "hpo_best_value": 84.98999786376953,
+    "seeds": 1,
+    "mean_time_to_best": 905.4822365,
+    "std_time_to_best": 0.0
+  },
+  {
+    "configuration": "Quad_neuron_ReLU2_arc_[3, 3, 3]",
+    "mean_accuracy": 82.44599914550781,
+    "std_accuracy": 0.3165926876576708,
+    "hpo_best_value": 83.69999694824219,
+    "seeds": 5,
+    "mean_time_to_best": 2376.70749642,
+    "std_time_to_best": 563.4777005487281
+  },
+  {
+    "configuration": "Quad_neuron_ReLU1_arc_[5, 5, 5]",
+    "mean_accuracy": 82.11399993896484,
+    "std_accuracy": 0.29904830074634714,
+    "hpo_best_value": 82.94000244140625,
+    "seeds": 5,
+    "mean_time_to_best": 3115.506773819984,
+    "std_time_to_best": 1257.6059790445354
+  },
+  {
+    "configuration": "Baseline_with_ReLU2_arc_(3_3_3)",
+    "mean_accuracy": 82.0459991455078,
+    "std_accuracy": 0.4612804259396652,
+    "hpo_best_value": 83.66000366210938,
+    "seeds": 5,
+    "mean_time_to_best": 1320.4873232600007,
+    "std_time_to_best": 294.2563662605589
+  },
+  {
+    "configuration": "Quad_adapters_with_ReLU0_arc_(9_9_9)",
+    "mean_accuracy": 81.98200073242188,
+    "std_accuracy": 0.1830836197533126,
+    "hpo_best_value": 91.80999755859375,
+    "seeds": 5,
+    "mean_time_to_best": 1647.7487584000016,
+    "std_time_to_best": 2889.7518881308474
+  },
+  {
+    "configuration": "Baseline_ReLU1_arc_[9, 9, 9]",
+    "mean_accuracy": 81.18199920654297,
+    "std_accuracy": 0.3879044044232392,
+    "hpo_best_value": 82.18000030517578,
+    "seeds": 5,
+    "mean_time_to_best": 1082.2807330399999,
+    "std_time_to_best": 271.04927190118497
+  },
+  {
+    "configuration": "Quad_neuron_ReLU0_arc_[9, 9, 9]",
+    "mean_accuracy": 81.14400024414063,
+    "std_accuracy": 1.2455023112758996,
+    "hpo_best_value": null,
+    "seeds": 5,
+    "mean_time_to_best": 1276.3901058200004,
+    "std_time_to_best": 1350.3898649168082
+  },
+  {
+    "configuration": "Baseline1_with_ReLU2_arc_(3_3_3)",
+    "mean_accuracy": 81.0374984741211,
+    "std_accuracy": 0.0,
+    "hpo_best_value": 83.66000366210938,
+    "seeds": 1,
+    "mean_time_to_best": 1015.9473044000006,
+    "std_time_to_best": 0.0
+  },
+  {
+    "configuration": "Quad_neuron_ReLU2_arc_[5, 5, 5]",
+    "mean_accuracy": 80.89800109863282,
+    "std_accuracy": 1.2894067336311983,
+    "hpo_best_value": 81.86000061035156,
+    "seeds": 5,
+    "mean_time_to_best": 1467.8866379399997,
+    "std_time_to_best": 892.8890521016319
+  },
+  {
+    "configuration": "Quad_neuron_ReLU2_arc_[9, 9, 9]",
+    "mean_accuracy": 80.85399932861328,
+    "std_accuracy": 0.6125608106699676,
+    "hpo_best_value": 80.93000030517578,
+    "seeds": 5,
+    "mean_time_to_best": 3063.07201494,
+    "std_time_to_best": 584.4807912425985
+  },
+  {
+    "configuration": "Baseline_ReLU1_arc_[3, 3, 3]",
+    "mean_accuracy": 80.77400054931641,
+    "std_accuracy": 0.511938632392423,
+    "hpo_best_value": 81.16000366210938,
+    "seeds": 5,
+    "mean_time_to_best": 381.43317656,
+    "std_time_to_best": 71.40844013604568
+  },
+  {
+    "configuration": "LoRA_with_ReLUNone_arc_(3_3_3)",
+    "mean_accuracy": 80.50999908447265,
+    "std_accuracy": 0.06633200127831658,
+    "hpo_best_value": 92.12000274658203,
+    "seeds": 5,
+    "mean_time_to_best": 474.9542013799772,
+    "std_time_to_best": 96.0991370189238
+  },
+  {
+    "configuration": "Quad_adapters_with_ReLU0_arc_(3_3_3)",
+    "mean_accuracy": 80.4279998779297,
+    "std_accuracy": 0.25390898677836515,
+    "hpo_best_value": 90.12000274658203,
+    "seeds": 5,
+    "mean_time_to_best": 138.8321703200025,
+    "std_time_to_best": 198.89419376430445
+  },
+  {
+    "configuration": "Quad_neuron_with_ReLU1_arc_(3_3_3)",
+    "mean_accuracy": 80.1519989013672,
+    "std_accuracy": 2.011535497874556,
+    "hpo_best_value": 84.98999786376953,
+    "seeds": 5,
+    "mean_time_to_best": 614.4735901200002,
+    "std_time_to_best": 845.1550037022738
+  },
+  {
+    "configuration": "Baseline_ReLU1_arc_[5, 5, 5]",
+    "mean_accuracy": 80.06200103759765,
+    "std_accuracy": 0.1003509831980244,
+    "hpo_best_value": 81.72000122070312,
+    "seeds": 5,
+    "mean_time_to_best": 1324.929446560001,
+    "std_time_to_best": 1260.5978012869368
+  },
+  {
+    "configuration": "Quad_neuron_ReLU0_arc_[5, 5, 5]",
+    "mean_accuracy": 78.92599945068359,
+    "std_accuracy": 1.2974711809740225,
+    "hpo_best_value": 80.0,
+    "seeds": 5,
+    "mean_time_to_best": 2872.641235479992,
+    "std_time_to_best": 1470.3242161470343
+  },
+  {
+    "configuration": "Quad_adapters_with_ReLU0_arc_(5_5_5)",
+    "mean_accuracy": 78.10599975585937,
+    "std_accuracy": 3.8290237585346483,
+    "hpo_best_value": 90.5999984741211,
+    "seeds": 5,
+    "mean_time_to_best": 3805.62685666,
+    "std_time_to_best": 824.8730334445719
+  },
+  {
+    "configuration": "Quad_neuron_with_ReLU0_arc_(3_3_3)",
+    "mean_accuracy": 74.0,
+    "std_accuracy": 2.181089842767678,
+    "hpo_best_value": 72.94999694824219,
+    "seeds": 5,
+    "mean_time_to_best": 974.0181367199999,
+    "std_time_to_best": 200.32789610163078
+  },
+  {
+    "configuration": "Baseline_ReLU0_arc_[9, 9, 9]",
+    "mean_accuracy": 41.14000015258789,
+    "std_accuracy": 0.061644003892248445,
+    "hpo_best_value": 41.97999954223633,
+    "seeds": 5,
+    "mean_time_to_best": 738.8938731000002,
+    "std_time_to_best": 161.80880740384623
+  },
+  {
+    "configuration": "Baseline_ReLU0_arc_[3, 3, 3]",
+    "mean_accuracy": 41.06399993896484,
+    "std_accuracy": 0.08203715288262432,
+    "hpo_best_value": 42.040000915527344,
+    "seeds": 5,
+    "mean_time_to_best": 92.73416378000039,
+    "std_time_to_best": 24.226391014896983
+  },
+  {
+    "configuration": "Baseline_ReLU0_arc_[5, 5, 5]",
+    "mean_accuracy": 40.95800018310547,
+    "std_accuracy": 0.17282898113546988,
+    "hpo_best_value": 41.93000030517578,
+    "seeds": 5,
+    "mean_time_to_best": 233.76344892000014,
+    "std_time_to_best": 88.41824985280695
+  }
+]
