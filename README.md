@@ -2,6 +2,8 @@
 
 This repository stems from a project work course on the Technical University of Denmark (DTU) and compares conventional ReLU networks with quadratic-neuron networks, quadratic adapters with LoRA adapters, and related ViT experiments.
 
+It is a organized version of https://github.com/ilkire1003/Fagprojekt
+
 This was used to test whether non-linear activation functions can be omitted from quadratic networks, in particular quadratic convolutional neural networks (QCNN), without hurting the performance of the models. 
 
 The datasets used for this project are
